@@ -14,9 +14,9 @@ fi
 
 # Set configuration variables
 XUI_VERSION="2.3.5"
-XUI_USERNAME="nimwx"
-XUI_PASSWORD="nimwx"
-XUI_PORT="80"
+XUI_USERNAME="admin"
+XUI_PASSWORD="admin"
+XUI_PORT="800"
 
 echo "📦 Installing X-UI v${XUI_VERSION}..."
 echo "👤 Username: ${XUI_USERNAME}"

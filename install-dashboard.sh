@@ -11,23 +11,6 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Create temporary directory and download required files
-echo "📥 Downloading required files..."
-TEMP_DIR=$(mktemp -d)
-cd "$TEMP_DIR"
-
-# Download necessary files from GitHub
-curl -sSLO https://raw.githubusercontent.com/mrnimwx/core/main/dashboard.py
-curl -sSLO https://raw.githubusercontent.com/mrnimwx/core/main/dashboard.service
-
-if [ ! -f "dashboard.py" ] || [ ! -f "dashboard.service" ]; then
-    echo "❌ Failed to download required files"
-    rm -rf "$TEMP_DIR"
-    exit 1
-fi
-
-echo "✅ Files downloaded successfully"
-
 # Install Python3 if not already installed
 echo "📦 Checking Python3 installation..."
 if ! command -v python3 &> /dev/null; then
@@ -42,18 +25,24 @@ fi
 echo "📁 Installing dashboard files..."
 
 # Copy dashboard script
-cp dashboard.py /root/
-chmod +x /root/dashboard.py
-echo "✅ Dashboard script installed"
+if [ -f "dashboard.py" ]; then
+    cp dashboard.py /root/
+    chmod +x /root/dashboard.py
+    echo "✅ Dashboard script installed"
+else
+    echo "❌ dashboard.py not found in current directory"
+    exit 1
+fi
 
 # Copy systemd service
-cp dashboard.service /etc/systemd/system/
-chmod 644 /etc/systemd/system/dashboard.service
-echo "✅ Dashboard service file installed"
-
-# Clean up temporary directory
-cd /root
-rm -rf "$TEMP_DIR"
+if [ -f "dashboard.service" ]; then
+    cp dashboard.service /etc/systemd/system/
+    chmod 644 /etc/systemd/system/dashboard.service
+    echo "✅ Dashboard service file installed"
+else
+    echo "❌ dashboard.service not found in current directory"
+    exit 1
+fi
 
 # Configure systemd service
 echo "🔄 Configuring systemd service..."

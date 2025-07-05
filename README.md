@@ -22,6 +22,13 @@ A comprehensive network infrastructure tool that provides HAProxy load balancing
 - Username/password: nimwx/nimwx
 - Runs on port 80
 
+### Network Dashboard
+- Real-time monitoring web interface
+- Service status monitoring (HAProxy, TLS Tester, X-UI)
+- Traffic statistics for proxy ports 8080-8086
+- Auto-refresh every 30 seconds
+- Runs on port 3030
+
 ## Quick Installation
 
 ### Complete Suite (Recommended)
@@ -51,6 +58,11 @@ sudo ./install-xui.sh
 sudo ./install-xui-interactive.sh
 ```
 
+#### Network Dashboard
+```bash
+sudo ./install-dashboard.sh
+```
+
 ## Manual Installation
 
 1. Clone this repository
@@ -62,6 +74,7 @@ sudo ./install-xui-interactive.sh
 - **HAProxy**: Listens on ports 8080-8086 and forwards to configured backends
 - **TLS Tester**: Runs on port 2020, access via `https://yourdomain.com:2020/?size=<bytes>`
 - **X-UI Panel**: Web interface on port 80, login with `nimwx/nimwx`
+- **Dashboard**: Monitoring interface on port 3030, access via `http://your-server-ip:3030/`
 
 ## Management
 
@@ -69,11 +82,13 @@ sudo ./install-xui-interactive.sh
 - HAProxy: `systemctl status haproxy`
 - TLS Tester: `systemctl status throughput-test`
 - X-UI Panel: `systemctl status x-ui`
+- Dashboard: `systemctl status dashboard`
 
 ### View Logs
 - HAProxy: `journalctl -u haproxy -f`
 - TLS Tester: `journalctl -u throughput-test -f`
 - X-UI Panel: `journalctl -u x-ui -f`
+- Dashboard: `journalctl -u dashboard -f`
 
 ### X-UI Management
 - Access panel: `http://your-server-ip:80/`
@@ -83,4 +98,5 @@ sudo ./install-xui-interactive.sh
 ## Uninstallation
 
 - TLS Tester: `./uninstall-tlstest.sh`
-- X-UI Panel: `./uninstall-xui.sh` 
+- X-UI Panel: `./uninstall-xui.sh`
+- Dashboard: `./uninstall-dashboard.sh` 

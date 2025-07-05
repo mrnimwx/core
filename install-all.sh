@@ -96,6 +96,18 @@ else
 fi
 
 echo ""
+echo "📊 Installing Network Dashboard..."
+
+# Install Dashboard
+if [ -f "install-dashboard.sh" ]; then
+    echo "📁 Using local dashboard installer..."
+    ./install-dashboard.sh
+else
+    echo "📥 Downloading and running dashboard installer..."
+    curl -sSL "https://raw.githubusercontent.com/yourusername/yourrepo/main/install-dashboard.sh" | bash
+fi
+
+echo ""
 echo "🎉 Complete Installation Finished!"
 echo "================================="
 echo ""
@@ -103,12 +115,17 @@ echo "📊 Service Status:"
 echo "  - HAProxy: systemctl status haproxy"
 echo "  - TLS Tester: systemctl status throughput-test"
 echo "  - X-UI Panel: systemctl status x-ui"
+echo "  - Dashboard: systemctl status dashboard"
 echo ""
 echo "📝 View Logs:"
 echo "  - HAProxy: journalctl -u haproxy -f"
 echo "  - TLS Tester: journalctl -u throughput-test -f"
 echo "  - X-UI Panel: journalctl -u x-ui -f"
+echo "  - Dashboard: journalctl -u dashboard -f"
 echo ""
 echo "🌐 Access Points:"
+echo "  - Dashboard: http://$(curl -s ifconfig.me):3030/"
 echo "  - X-UI Panel: http://$(curl -s ifconfig.me):80/"
-echo "  - TLS Tester: https://yourdomain.com:2020/" 
+echo "  - TLS Tester: https://yourdomain.com:2020/"
+echo ""
+echo "📊 The dashboard provides real-time monitoring of all services!" 

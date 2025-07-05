@@ -70,9 +70,11 @@ install_certbot() {
 validate_domain() {
     local domain=$1
     
-    # Basic domain validation
-    if [[ ! $domain =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$ ]]; then
+    # Basic domain validation - simplified and more permissive
+    if [[ ! $domain =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]] || [[ $domain =~ \.\. ]] || [[ $domain =~ ^[.-] ]] || [[ $domain =~ [.-]$ ]]; then
         echo "❌ Invalid domain format"
+        echo "ℹ️  Domain should be in format: example.com or subdomain.example.com"
+        echo "ℹ️  Your domain: $domain"
         return 1
     fi
     

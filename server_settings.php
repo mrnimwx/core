@@ -528,12 +528,34 @@ foreach ($orders as $order) {
             }, TEST_TIMEOUT);
             
             try {
-                const results = {
-                    ping: await testPing(domain, serverId),
-                    download: await testDownloadSpeed(domain, port, serverId),
-                    upload: await testUploadSpeed(domain, port, serverId),
-                    dataLoss: await testDataIntegrity(domain, port, serverId)
-                };
+                const results = {};
+                
+                // Test ping first
+                results.ping = await testPing(domain, serverId);
+                
+                // Try download test with fallback
+                try {
+                    results.download = await testDownloadSpeed(domain, port, serverId);
+                } catch (error) {
+                    debugLog(`Download test failed, using fallback: ${error.message}`);
+                    results.download = 0; // Use 0 as fallback
+                }
+                
+                // Try upload test with fallback  
+                try {
+                    results.upload = await testUploadSpeed(domain, port, serverId);
+                } catch (error) {
+                    debugLog(`Upload test failed, using fallback: ${error.message}`);
+                    results.upload = 0; // Use 0 as fallback
+                }
+                
+                // Try data integrity test with fallback
+                try {
+                    results.dataLoss = await testDataIntegrity(domain, port, serverId);
+                } catch (error) {
+                    debugLog(`Data integrity test failed, using fallback: ${error.message}`);
+                    results.dataLoss = 100; // Use 100% loss as fallback
+                }
                 
                 clearTimeout(timeoutId);
                 testResults.set(serverId, results);
@@ -610,9 +632,9 @@ foreach ($orders as $order) {
         
         // Test download speed with data integrity check
         async function testDownloadSpeed(domain, port, serverId) {
-            const testSizes = [512 * 1024, 1024 * 1024]; // 512KB, 1MB - smaller for faster testing
+            const testSizes = [256 * 1024, 512 * 1024]; // 256KB, 512KB - even smaller for better reliability
             const speeds = [];
-            const timeout = 15000; // 15 seconds per download test
+            const timeout = 10000; // 10 seconds per download test
             
             for (let i = 0; i < testSizes.length; i++) {
                 try {
@@ -622,10 +644,13 @@ foreach ($orders as $order) {
                     
                     const start = performance.now();
                     
-                    const response = await fetch(`https://${domain}:${port}/test?size=${size}&hash=true&type=pattern`, {
+                    // Use a simpler endpoint that just returns data without complex processing
+                    const response = await fetch(`https://${domain}:${port}/test?size=${size}`, {
                         method: 'GET',
                         headers: { 
-                            'Origin': window.location.origin
+                            'Origin': window.location.origin,
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache'
                         },
                         signal: controller.signal
                     });
@@ -634,14 +659,23 @@ foreach ($orders as $order) {
                     
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     
-                    const data = await response.arrayBuffer();
+                    // Read data in chunks to avoid memory issues
+                    const reader = response.body.getReader();
+                    let bytesReceived = 0;
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        bytesReceived += value.length;
+                    }
+                    
                     const end = performance.now();
                     
                     const duration = (end - start) / 1000; // seconds
-                    const speed = (data.byteLength / 1024) / duration; // KB/s
+                    const speed = (bytesReceived / 1024) / duration; // KB/s
                     speeds.push(speed);
                     
-                    debugLog(`Download test ${i + 1}: ${Math.round(speed)} KB/s`);
+                    debugLog(`Download test ${i + 1}: ${Math.round(speed)} KB/s (${bytesReceived} bytes)`);
                     updateProgress(serverId, 25 + ((i + 1) / testSizes.length) * 25); // 25-50% of total progress
                     
                 } catch (error) {
@@ -649,6 +683,7 @@ foreach ($orders as $order) {
                     if (error.name === 'AbortError') {
                         debugLog(`Download test ${i + 1} timed out`);
                     }
+                    // Continue with next test even if this one fails
                 }
             }
             

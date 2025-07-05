@@ -500,13 +500,6 @@ foreach ($orders as $order) {
             updateTestStatus(serverId, 'در حال تست...', 'testing');
             showTestProgress(serverId, true);
             
-            const timeoutId = setTimeout(() => {
-                activeTests.delete(serverId);
-                showTestProgress(serverId, false);
-                updateTestStatus(serverId, 'تست منقضی شد', 'error');
-                showNotification('تست به دلیل طولانی شدن متوقف شد.', 'error');
-            }, TEST_TIMEOUT);
-            
             try {
                 const results = {};
                 
@@ -518,7 +511,6 @@ foreach ($orders as $order) {
                 results.download = await testDownloadSpeed(domain, port, serverId);
                 updateProgress(serverId, 100);
                 
-                clearTimeout(timeoutId);
                 testResults.set(serverId, results);
                 displayTestResults(serverId, results);
                 updateTestStatus(serverId, 'تست کامل شد', 'completed');
@@ -531,7 +523,6 @@ foreach ($orders as $order) {
                 }));
                 
             } catch (error) {
-                clearTimeout(timeoutId);
                 console.log(`Speed test failed for server ${serverId}: ${error.message}`);
                 updateTestStatus(serverId, 'خطا در تست', 'error');
                 showNotification(`خطا در تست سرور: ${error.message}`, 'error');
@@ -543,23 +534,15 @@ foreach ($orders as $order) {
         
         // Test ping - simple single attempt
         async function testPing(domain, serverId) {
-            const timeout = 5000; // 5 seconds
-            
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), timeout);
-                
                 const start = performance.now();
                 const response = await fetch(`https://${domain}:2020/ping`, {
                     method: 'GET',
                     headers: { 
                         'Content-Type': 'application/json',
                         'Origin': window.location.origin
-                    },
-                    signal: controller.signal
+                    }
                 });
-                
-                clearTimeout(timeoutId);
                 
                 if (response.ok) {
                     const end = performance.now();
@@ -576,13 +559,9 @@ foreach ($orders as $order) {
         
         // Test download speed - simple single test
         async function testDownloadSpeed(domain, port, serverId) {
-            const size = 1024 * 1024; // 1MB
-            const timeout = 10000; // 10 seconds
+            const size = 512 * 1024; // 512KB - smaller for reliability
             
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), timeout);
-                
                 const start = performance.now();
                 
                 const response = await fetch(`https://${domain}:${port}/test?size=${size}`, {
@@ -590,11 +569,8 @@ foreach ($orders as $order) {
                     headers: { 
                         'Origin': window.location.origin,
                         'Cache-Control': 'no-cache'
-                    },
-                    signal: controller.signal
+                    }
                 });
-                
-                clearTimeout(timeoutId);
                 
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 

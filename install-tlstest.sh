@@ -42,8 +42,8 @@ cd "$TEMP_DIR"
 echo "📁 Downloading files..."
 
 # Download all required files from GitHub
-curl -sSL "https://raw.githubusercontent.com/mrnimwx/tlstest/main/throughput_test.py" -o throughput_test.py
-curl -sSL "https://raw.githubusercontent.com/mrnimwx/tlstest/main/throughput-test.service" -o throughput-test.service
+curl -sSL "https://raw.githubusercontent.com/mrnimwx/core/main/throughput_test.py" -o throughput_test.py
+curl -sSL "https://raw.githubusercontent.com/mrnimwx/core/main/throughput-test.service" -o throughput-test.service
 
 # Check if downloads were successful
 if [ ! -f "throughput_test.py" ] || [ ! -f "throughput-test.service" ]; then

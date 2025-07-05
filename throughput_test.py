@@ -80,6 +80,8 @@ class ThroughputStats:
 stats_manager = ThroughputStats()
 
 class RobustThroughputHandler(BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'  # Force HTTP/1.1 instead of HTTP/1.0
+    
     def log_message(self, format, *args):
         # Custom logging with timestamp
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -109,6 +111,7 @@ class RobustThroughputHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', '*')
+        self.send_header('Connection', 'keep-alive')
         
         if path == '/stats':
             self._handle_stats()
@@ -141,6 +144,7 @@ class RobustThroughputHandler(BaseHTTPRequestHandler):
     def _handle_stats(self):
         """Return server statistics"""
         self.send_header('Content-Type', 'application/json')
+        self.send_header('Connection', 'keep-alive')
         self.end_headers()
         
         stats = stats_manager.get_stats()
@@ -149,6 +153,7 @@ class RobustThroughputHandler(BaseHTTPRequestHandler):
     def _handle_ping(self):
         """Handle ping test"""
         self.send_header('Content-Type', 'application/json')
+        self.send_header('Connection', 'keep-alive')
         self.end_headers()
         
         response = {
@@ -165,6 +170,7 @@ class RobustThroughputHandler(BaseHTTPRequestHandler):
         server_timestamp = time.time()
         
         self.send_header('Content-Type', 'application/json')
+        self.send_header('Connection', 'keep-alive')
         self.end_headers()
         
         response = {
@@ -186,6 +192,7 @@ class RobustThroughputHandler(BaseHTTPRequestHandler):
         data_hash = hashlib.sha256(upload_data.encode()).hexdigest()
         
         self.send_header('Content-Type', 'application/json')
+        self.send_header('Connection', 'keep-alive')
         self.end_headers()
         
         response = {
@@ -207,6 +214,7 @@ class RobustThroughputHandler(BaseHTTPRequestHandler):
         actual_hash = hashlib.sha256(test_data.encode()).hexdigest()
         
         self.send_header('Content-Type', 'application/json')
+        self.send_header('Connection', 'keep-alive')
         self.end_headers()
         
         response = {
@@ -272,6 +280,7 @@ class RobustThroughputHandler(BaseHTTPRequestHandler):
         test_type = data.get('test_type', 'download')
         
         self.send_header('Content-Type', 'application/json')
+        self.send_header('Connection', 'keep-alive')
         self.end_headers()
         
         # Generate test data
@@ -316,6 +325,7 @@ class RobustThroughputHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', '*')
+        self.send_header('Connection', 'keep-alive')
         self.end_headers()
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):

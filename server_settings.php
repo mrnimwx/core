@@ -23,6 +23,11 @@ if (!$user) {
     exit;
 }
 
+// Set headers to prevent caching
+header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 $conn = connect_main_db();
 
 // Handle speed server selection
@@ -124,6 +129,9 @@ foreach ($orders as $order) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>تنظیم سرور - تست سرعت پیشرفته</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -436,10 +444,12 @@ foreach ($orders as $order) {
     <?php include 'includes/footer.php'; ?>
 
     <script>
-        // Enhanced speed testing with comprehensive metrics
+        // Enhanced speed testing with comprehensive metrics - v3.0 - Updated for production
         const DEBUG_MODE = false;
         const testResults = new Map();
         const activeTests = new Set();
+        const MAX_CONCURRENT_TESTS = 3;
+        const TEST_TIMEOUT = 30000; // 30 seconds
         
         function debugLog(message) {
             if (DEBUG_MODE) {
@@ -457,14 +467,42 @@ foreach ($orders as $order) {
         updateClock();
         setInterval(updateClock, 1000);
 
-        // Test all servers on page load
+        // Load cached results and test servers on page load
         document.addEventListener('DOMContentLoaded', function() {
+            // Load cached test results
+            loadCachedResults();
+            
             <?php if ($has_smart_sub): ?>
+            // Auto-test servers after a delay
             setTimeout(() => {
                 testAllServers();
-            }, 1000);
+            }, 2000);
             <?php endif; ?>
         });
+        
+        // Load cached test results from localStorage
+        function loadCachedResults() {
+            const speedCards = document.querySelectorAll('.speed-card');
+            speedCards.forEach(card => {
+                const serverId = card.dataset.serverId;
+                const cachedData = localStorage.getItem(`server_test_${serverId}`);
+                
+                if (cachedData) {
+                    try {
+                        const data = JSON.parse(cachedData);
+                        const age = Date.now() - data.timestamp;
+                        
+                        // Show cached results if less than 1 hour old
+                        if (age < 3600000) {
+                            displayTestResults(serverId, data.results);
+                            updateTestStatus(serverId, `نتایج ذخیره شده (${Math.round(age / 60000)} دقیقه پیش)`, 'completed');
+                        }
+                    } catch (error) {
+                        debugLog(`Failed to load cached results for server ${serverId}: ${error.message}`);
+                    }
+                }
+            });
+        }
         
         // Run comprehensive test on a single server
         async function runComprehensiveTest(serverId, domain, port) {
@@ -473,9 +511,21 @@ foreach ($orders as $order) {
                 return;
             }
             
+            if (activeTests.size >= MAX_CONCURRENT_TESTS) {
+                showNotification('حداکثر تعداد تست همزمان در حال اجرا است.', 'warning');
+                return;
+            }
+            
             activeTests.add(serverId);
             updateTestStatus(serverId, 'در حال تست...', 'testing');
             showTestProgress(serverId, true);
+            
+            const timeoutId = setTimeout(() => {
+                activeTests.delete(serverId);
+                showTestProgress(serverId, false);
+                updateTestStatus(serverId, 'تست منقضی شد', 'error');
+                showNotification('تست به دلیل طولانی شدن متوقف شد.', 'error');
+            }, TEST_TIMEOUT);
             
             try {
                 const results = {
@@ -485,11 +535,20 @@ foreach ($orders as $order) {
                     dataLoss: await testDataIntegrity(domain, port, serverId)
                 };
                 
+                clearTimeout(timeoutId);
                 testResults.set(serverId, results);
                 displayTestResults(serverId, results);
                 updateTestStatus(serverId, 'تست کامل شد', 'completed');
                 
+                // Save results to localStorage for persistence
+                localStorage.setItem(`server_test_${serverId}`, JSON.stringify({
+                    results,
+                    timestamp: Date.now(),
+                    domain
+                }));
+                
             } catch (error) {
+                clearTimeout(timeoutId);
                 debugLog(`Comprehensive test failed for server ${serverId}: ${error.message}`);
                 updateTestStatus(serverId, 'خطا در تست', 'error');
                 showNotification(`خطا در تست سرور: ${error.message}`, 'error');
@@ -499,34 +558,51 @@ foreach ($orders as $order) {
             }
         }
         
-        // Test ping with multiple attempts
+        // Test ping with multiple attempts and better error handling
         async function testPing(domain, serverId) {
-            const attempts = 5;
+            const attempts = 3;
             const pings = [];
+            const timeout = 5000; // 5 seconds per ping
             
             for (let i = 0; i < attempts; i++) {
                 try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeout);
+                    
                     const start = performance.now();
                     const response = await fetch(`https://${domain}:2020/ping`, {
                         method: 'GET',
                         headers: { 
                             'Content-Type': 'application/json',
-                            'Origin': 'https://zignalshop.ir'
-                        }
+                            'Origin': window.location.origin
+                        },
+                        signal: controller.signal
                     });
+                    
+                    clearTimeout(timeoutId);
                     
                     if (response.ok) {
                         const end = performance.now();
-                        pings.push(end - start);
+                        const pingTime = end - start;
+                        pings.push(pingTime);
+                        debugLog(`Ping ${i + 1}: ${Math.round(pingTime)}ms`);
                     }
                 } catch (error) {
                     debugLog(`Ping attempt ${i + 1} failed: ${error.message}`);
+                    if (error.name === 'AbortError') {
+                        debugLog(`Ping ${i + 1} timed out`);
+                    }
                 }
                 
                 updateProgress(serverId, ((i + 1) / attempts) * 25); // 25% of total progress
+                
+                // Small delay between pings
+                if (i < attempts - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
             }
             
-            if (pings.length === 0) throw new Error('All ping attempts failed');
+            if (pings.length === 0) throw new Error('همه تلاش‌های پینگ ناموفق بود');
             
             const avgPing = pings.reduce((a, b) => a + b, 0) / pings.length;
             return Math.round(avgPing);
@@ -534,20 +610,27 @@ foreach ($orders as $order) {
         
         // Test download speed with data integrity check
         async function testDownloadSpeed(domain, port, serverId) {
-            const testSizes = [1024 * 1024, 2 * 1024 * 1024]; // 1MB, 2MB
+            const testSizes = [512 * 1024, 1024 * 1024]; // 512KB, 1MB - smaller for faster testing
             const speeds = [];
+            const timeout = 15000; // 15 seconds per download test
             
             for (let i = 0; i < testSizes.length; i++) {
                 try {
                     const size = testSizes[i];
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeout);
+                    
                     const start = performance.now();
                     
                     const response = await fetch(`https://${domain}:${port}/test?size=${size}&hash=true&type=pattern`, {
                         method: 'GET',
                         headers: { 
-                            'Origin': 'https://zignalshop.ir'
-                        }
+                            'Origin': window.location.origin
+                        },
+                        signal: controller.signal
                     });
+                    
+                    clearTimeout(timeoutId);
                     
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     
@@ -558,28 +641,35 @@ foreach ($orders as $order) {
                     const speed = (data.byteLength / 1024) / duration; // KB/s
                     speeds.push(speed);
                     
+                    debugLog(`Download test ${i + 1}: ${Math.round(speed)} KB/s`);
                     updateProgress(serverId, 25 + ((i + 1) / testSizes.length) * 25); // 25-50% of total progress
                     
                 } catch (error) {
                     debugLog(`Download test ${i + 1} failed: ${error.message}`);
+                    if (error.name === 'AbortError') {
+                        debugLog(`Download test ${i + 1} timed out`);
+                    }
                 }
             }
             
-            if (speeds.length === 0) throw new Error('All download tests failed');
+            if (speeds.length === 0) throw new Error('همه تست‌های دانلود ناموفق بود');
             
             const avgSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
             return Math.round(avgSpeed);
         }
         
-        // Test upload speed
+        // Test upload speed with smaller payloads for better performance
         async function testUploadSpeed(domain, port, serverId) {
-            const testSizes = [512 * 1024, 1024 * 1024]; // 512KB, 1MB
+            const testSizes = [256 * 1024, 512 * 1024]; // 256KB, 512KB - smaller for faster testing
             const speeds = [];
+            const timeout = 15000; // 15 seconds per upload test
             
             for (let i = 0; i < testSizes.length; i++) {
                 try {
                     const size = testSizes[i];
                     const testData = generateTestData(size);
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeout);
                     
                     const start = performance.now();
                     
@@ -587,13 +677,16 @@ foreach ($orders as $order) {
                         method: 'POST',
                         headers: { 
                             'Content-Type': 'application/json',
-                            'Origin': 'https://zignalshop.ir'
+                            'Origin': window.location.origin
                         },
                         body: JSON.stringify({
                             type: 'upload',
                             data: testData
-                        })
+                        }),
+                        signal: controller.signal
                     });
+                    
+                    clearTimeout(timeoutId);
                     
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     
@@ -604,47 +697,64 @@ foreach ($orders as $order) {
                     const speed = (result.received_bytes / 1024) / duration; // KB/s
                     speeds.push(speed);
                     
+                    debugLog(`Upload test ${i + 1}: ${Math.round(speed)} KB/s`);
                     updateProgress(serverId, 50 + ((i + 1) / testSizes.length) * 25); // 50-75% of total progress
                     
                 } catch (error) {
                     debugLog(`Upload test ${i + 1} failed: ${error.message}`);
+                    if (error.name === 'AbortError') {
+                        debugLog(`Upload test ${i + 1} timed out`);
+                    }
                 }
             }
             
-            if (speeds.length === 0) throw new Error('All upload tests failed');
+            if (speeds.length === 0) throw new Error('همه تست‌های آپلود ناموفق بود');
             
             const avgSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
             return Math.round(avgSpeed);
         }
         
-        // Test data integrity and loss
+        // Test data integrity and loss with timeout
         async function testDataIntegrity(domain, port, serverId) {
-            const testData = generateTestData(1024 * 100); // 100KB test
+            const testData = generateTestData(1024 * 50); // 50KB test - smaller for faster testing
             const expectedHash = await calculateHash(testData);
+            const timeout = 10000; // 10 seconds
             
             try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeout);
+                
                 const response = await fetch(`https://${domain}:${port}/`, {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'Origin': 'https://zignalshop.ir'
+                        'Origin': window.location.origin
                     },
                     body: JSON.stringify({
                         type: 'data_integrity',
                         data: testData,
                         hash: expectedHash
-                    })
+                    }),
+                    signal: controller.signal
                 });
+                
+                clearTimeout(timeoutId);
                 
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 
                 const result = await response.json();
                 updateProgress(serverId, 100); // 100% of total progress
                 
-                return result.data_integrity ? 0 : 100; // 0% loss if integrity check passes
+                const dataLoss = result.data_integrity ? 0 : 100;
+                debugLog(`Data integrity test: ${dataLoss}% loss`);
+                return dataLoss;
                 
             } catch (error) {
                 debugLog(`Data integrity test failed: ${error.message}`);
+                if (error.name === 'AbortError') {
+                    debugLog('Data integrity test timed out');
+                }
+                updateProgress(serverId, 100);
                 return 100; // 100% loss on error
             }
         }
@@ -797,20 +907,42 @@ foreach ($orders as $order) {
             statusElement.innerHTML = `<span class="${badgeClass}"><i class="fas ${icon} ml-1"></i>${text}</span>`;
         }
         
-        // Test all servers
+        // Test all servers with improved scheduling
         function testAllServers() {
             const speedCards = document.querySelectorAll('.speed-card');
-            speedCards.forEach((card, index) => {
-                const serverId = card.dataset.serverId;
-                const domain = card.dataset.serverDomain;
-                const port = card.dataset.serverPort;
+            const servers = Array.from(speedCards).map(card => ({
+                serverId: parseInt(card.dataset.serverId),
+                domain: card.dataset.serverDomain,
+                port: parseInt(card.dataset.serverPort)
+            })).filter(server => server.serverId && server.domain && server.port);
+            
+            if (servers.length === 0) {
+                showNotification('هیچ سروری برای تست یافت نشد.', 'warning');
+                return;
+            }
+            
+            showNotification(`شروع تست ${servers.length} سرور...`, 'info');
+            
+            // Test servers in batches to avoid overwhelming
+            let currentIndex = 0;
+            const batchSize = MAX_CONCURRENT_TESTS;
+            
+            function testNextBatch() {
+                const batch = servers.slice(currentIndex, currentIndex + batchSize);
+                currentIndex += batchSize;
                 
-                if (serverId && domain && port) {
+                batch.forEach((server, index) => {
                     setTimeout(() => {
-                        runComprehensiveTest(parseInt(serverId), domain, parseInt(port));
-                    }, index * 2000); // 2 second delay between tests
+                        runComprehensiveTest(server.serverId, server.domain, server.port);
+                    }, index * 500); // 500ms delay between tests in same batch
+                });
+                
+                if (currentIndex < servers.length) {
+                    setTimeout(testNextBatch, 5000); // 5 second delay between batches
                 }
-            });
+            }
+            
+            testNextBatch();
         }
         
         // Benchmark all servers (more intensive testing)

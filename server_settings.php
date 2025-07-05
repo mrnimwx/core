@@ -293,8 +293,8 @@ foreach ($orders as $order) {
             <div class="bg-white rounded-lg shadow-sm p-6">
                 <div class="flex items-center justify-between mb-6">
                     <div>
-                        <h2 class="text-2xl font-bold text-gray-800">تست سرعت و کیفیت اتصال</h2>
-                        <p class="text-gray-600 mt-1">تست جامع سرعت، پینگ و کیفیت اتصال</p>
+                        <h2 class="text-2xl font-bold text-gray-800">تست سرعت اتصال</h2>
+                        <p class="text-gray-600 mt-1">تست ساده سرعت دانلود</p>
                     </div>
                     
                     <?php if ($has_smart_sub): ?>
@@ -303,11 +303,6 @@ foreach ($orders as $order) {
                                 class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-200">
                             <i class="fas fa-sync-alt ml-2"></i>
                             تست همه سرورها
-                        </button>
-                        <button onclick="benchmarkAllServers()" 
-                                class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition duration-200">
-                            <i class="fas fa-chart-line ml-2"></i>
-                            تست عملکرد کامل
                         </button>
                     </div>
                     <?php endif; ?>
@@ -400,22 +395,14 @@ foreach ($orders as $order) {
                                     <div class="metric-value" id="download-<?= $server['id'] ?>">-</div>
                                     <div class="metric-label">دانلود (KB/s)</div>
                                 </div>
-                                <div class="metric-item">
-                                    <div class="metric-value" id="upload-<?= $server['id'] ?>">-</div>
-                                    <div class="metric-label">آپلود (KB/s)</div>
-                                </div>
-                                <div class="metric-item">
-                                    <div class="metric-value" id="loss-<?= $server['id'] ?>">-</div>
-                                    <div class="metric-label">از دست رفتن (%)</div>
-                                </div>
                             </div>
 
                             <!-- Action Buttons -->
                             <div class="space-y-2 mt-4">
-                                <button onclick="runComprehensiveTest(<?= $server['id'] ?>, '<?= htmlspecialchars($server['speed_domain']) ?>', <?= $server['test_port'] ?>)" 
+                                <button onclick="runSpeedTest(<?= $server['id'] ?>, '<?= htmlspecialchars($server['speed_domain']) ?>', <?= $server['test_port'] ?>)" 
                                         class="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition duration-200">
                                     <i class="fas fa-play ml-2"></i>
-                                    تست کامل
+                                    تست سرعت
                                 </button>
                                 
                                 <?php if ($current_speed_server_id != $server['id']): ?>
@@ -444,18 +431,11 @@ foreach ($orders as $order) {
     <?php include 'includes/footer.php'; ?>
 
     <script>
-        // Enhanced speed testing with comprehensive metrics - v3.0 - Updated for production
-        const DEBUG_MODE = false;
+        // Simple speed testing
         const testResults = new Map();
         const activeTests = new Set();
         const MAX_CONCURRENT_TESTS = 3;
-        const TEST_TIMEOUT = 30000; // 30 seconds
-        
-        function debugLog(message) {
-            if (DEBUG_MODE) {
-                console.log(`[Advanced Speed Test] ${message}`);
-            }
-        }
+        const TEST_TIMEOUT = 15000; // 15 seconds
         
         // Update clock
         function updateClock() {
@@ -498,14 +478,14 @@ foreach ($orders as $order) {
                             updateTestStatus(serverId, `نتایج ذخیره شده (${Math.round(age / 60000)} دقیقه پیش)`, 'completed');
                         }
                     } catch (error) {
-                        debugLog(`Failed to load cached results for server ${serverId}: ${error.message}`);
+                        console.log(`Failed to load cached results for server ${serverId}: ${error.message}`);
                     }
                 }
             });
         }
         
-        // Run comprehensive test on a single server
-        async function runComprehensiveTest(serverId, domain, port) {
+        // Run simple speed test on a single server
+        async function runSpeedTest(serverId, domain, port) {
             if (activeTests.has(serverId)) {
                 showNotification('تست در حال اجرا است، لطفاً صبر کنید.', 'warning');
                 return;
@@ -530,32 +510,13 @@ foreach ($orders as $order) {
             try {
                 const results = {};
                 
-                // Test ping first
+                // Test ping
                 results.ping = await testPing(domain, serverId);
+                updateProgress(serverId, 50);
                 
-                // Try download test with fallback
-                try {
-                    results.download = await testDownloadSpeed(domain, port, serverId);
-                } catch (error) {
-                    debugLog(`Download test failed, using fallback: ${error.message}`);
-                    results.download = 0; // Use 0 as fallback
-                }
-                
-                // Try upload test with fallback  
-                try {
-                    results.upload = await testUploadSpeed(domain, port, serverId);
-                } catch (error) {
-                    debugLog(`Upload test failed, using fallback: ${error.message}`);
-                    results.upload = 0; // Use 0 as fallback
-                }
-                
-                // Try data integrity test with fallback
-                try {
-                    results.dataLoss = await testDataIntegrity(domain, port, serverId);
-                } catch (error) {
-                    debugLog(`Data integrity test failed, using fallback: ${error.message}`);
-                    results.dataLoss = 100; // Use 100% loss as fallback
-                }
+                // Test download speed
+                results.download = await testDownloadSpeed(domain, port, serverId);
+                updateProgress(serverId, 100);
                 
                 clearTimeout(timeoutId);
                 testResults.set(serverId, results);
@@ -571,7 +532,7 @@ foreach ($orders as $order) {
                 
             } catch (error) {
                 clearTimeout(timeoutId);
-                debugLog(`Comprehensive test failed for server ${serverId}: ${error.message}`);
+                console.log(`Speed test failed for server ${serverId}: ${error.message}`);
                 updateTestStatus(serverId, 'خطا در تست', 'error');
                 showNotification(`خطا در تست سرور: ${error.message}`, 'error');
             } finally {
@@ -580,196 +541,56 @@ foreach ($orders as $order) {
             }
         }
         
-        // Test ping with multiple attempts and better error handling
+        // Test ping - simple single attempt
         async function testPing(domain, serverId) {
-            const attempts = 3;
-            const pings = [];
-            const timeout = 5000; // 5 seconds per ping
+            const timeout = 5000; // 5 seconds
             
-            for (let i = 0; i < attempts; i++) {
-                try {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), timeout);
-                    
-                    const start = performance.now();
-                    const response = await fetch(`https://${domain}:2020/ping`, {
-                        method: 'GET',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Origin': window.location.origin
-                        },
-                        signal: controller.signal
-                    });
-                    
-                    clearTimeout(timeoutId);
-                    
-                    if (response.ok) {
-                        const end = performance.now();
-                        const pingTime = end - start;
-                        pings.push(pingTime);
-                        debugLog(`Ping ${i + 1}: ${Math.round(pingTime)}ms`);
-                    }
-                } catch (error) {
-                    debugLog(`Ping attempt ${i + 1} failed: ${error.message}`);
-                    if (error.name === 'AbortError') {
-                        debugLog(`Ping ${i + 1} timed out`);
-                    }
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeout);
+                
+                const start = performance.now();
+                const response = await fetch(`https://${domain}:2020/ping`, {
+                    method: 'GET',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Origin': window.location.origin
+                    },
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (response.ok) {
+                    const end = performance.now();
+                    const pingTime = end - start;
+                    return Math.round(pingTime);
                 }
                 
-                updateProgress(serverId, ((i + 1) / attempts) * 25); // 25% of total progress
-                
-                // Small delay between pings
-                if (i < attempts - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                }
+                throw new Error('Ping failed');
+            } catch (error) {
+                console.log(`Ping failed: ${error.message}`);
+                return 999; // Return high ping on error
             }
-            
-            if (pings.length === 0) throw new Error('همه تلاش‌های پینگ ناموفق بود');
-            
-            const avgPing = pings.reduce((a, b) => a + b, 0) / pings.length;
-            return Math.round(avgPing);
         }
         
-        // Test download speed with data integrity check
+        // Test download speed - simple single test
         async function testDownloadSpeed(domain, port, serverId) {
-            const testSizes = [256 * 1024, 512 * 1024]; // 256KB, 512KB - even smaller for better reliability
-            const speeds = [];
-            const timeout = 10000; // 10 seconds per download test
-            
-            for (let i = 0; i < testSizes.length; i++) {
-                try {
-                    const size = testSizes[i];
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), timeout);
-                    
-                    const start = performance.now();
-                    
-                    // Use a simpler endpoint that just returns data without complex processing
-                    const response = await fetch(`https://${domain}:${port}/test?size=${size}`, {
-                        method: 'GET',
-                        headers: { 
-                            'Origin': window.location.origin,
-                            'Cache-Control': 'no-cache',
-                            'Pragma': 'no-cache'
-                        },
-                        signal: controller.signal
-                    });
-                    
-                    clearTimeout(timeoutId);
-                    
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                    
-                    // Read data in chunks to avoid memory issues
-                    const reader = response.body.getReader();
-                    let bytesReceived = 0;
-                    
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        bytesReceived += value.length;
-                    }
-                    
-                    const end = performance.now();
-                    
-                    const duration = (end - start) / 1000; // seconds
-                    const speed = (bytesReceived / 1024) / duration; // KB/s
-                    speeds.push(speed);
-                    
-                    debugLog(`Download test ${i + 1}: ${Math.round(speed)} KB/s (${bytesReceived} bytes)`);
-                    updateProgress(serverId, 25 + ((i + 1) / testSizes.length) * 25); // 25-50% of total progress
-                    
-                } catch (error) {
-                    debugLog(`Download test ${i + 1} failed: ${error.message}`);
-                    if (error.name === 'AbortError') {
-                        debugLog(`Download test ${i + 1} timed out`);
-                    }
-                    // Continue with next test even if this one fails
-                }
-            }
-            
-            if (speeds.length === 0) throw new Error('همه تست‌های دانلود ناموفق بود');
-            
-            const avgSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
-            return Math.round(avgSpeed);
-        }
-        
-        // Test upload speed with smaller payloads for better performance
-        async function testUploadSpeed(domain, port, serverId) {
-            const testSizes = [256 * 1024, 512 * 1024]; // 256KB, 512KB - smaller for faster testing
-            const speeds = [];
-            const timeout = 15000; // 15 seconds per upload test
-            
-            for (let i = 0; i < testSizes.length; i++) {
-                try {
-                    const size = testSizes[i];
-                    const testData = generateTestData(size);
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), timeout);
-                    
-                    const start = performance.now();
-                    
-                    const response = await fetch(`https://${domain}:${port}/`, {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Origin': window.location.origin
-                        },
-                        body: JSON.stringify({
-                            type: 'upload',
-                            data: testData
-                        }),
-                        signal: controller.signal
-                    });
-                    
-                    clearTimeout(timeoutId);
-                    
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                    
-                    const result = await response.json();
-                    const end = performance.now();
-                    
-                    const duration = (end - start) / 1000; // seconds
-                    const speed = (result.received_bytes / 1024) / duration; // KB/s
-                    speeds.push(speed);
-                    
-                    debugLog(`Upload test ${i + 1}: ${Math.round(speed)} KB/s`);
-                    updateProgress(serverId, 50 + ((i + 1) / testSizes.length) * 25); // 50-75% of total progress
-                    
-                } catch (error) {
-                    debugLog(`Upload test ${i + 1} failed: ${error.message}`);
-                    if (error.name === 'AbortError') {
-                        debugLog(`Upload test ${i + 1} timed out`);
-                    }
-                }
-            }
-            
-            if (speeds.length === 0) throw new Error('همه تست‌های آپلود ناموفق بود');
-            
-            const avgSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
-            return Math.round(avgSpeed);
-        }
-        
-        // Test data integrity and loss with timeout
-        async function testDataIntegrity(domain, port, serverId) {
-            const testData = generateTestData(1024 * 50); // 50KB test - smaller for faster testing
-            const expectedHash = await calculateHash(testData);
+            const size = 1024 * 1024; // 1MB
             const timeout = 10000; // 10 seconds
             
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), timeout);
                 
-                const response = await fetch(`https://${domain}:${port}/`, {
-                    method: 'POST',
+                const start = performance.now();
+                
+                const response = await fetch(`https://${domain}:${port}/test?size=${size}`, {
+                    method: 'GET',
                     headers: { 
-                        'Content-Type': 'application/json',
-                        'Origin': window.location.origin
+                        'Origin': window.location.origin,
+                        'Cache-Control': 'no-cache'
                     },
-                    body: JSON.stringify({
-                        type: 'data_integrity',
-                        data: testData,
-                        hash: expectedHash
-                    }),
                     signal: controller.signal
                 });
                 
@@ -777,41 +598,30 @@ foreach ($orders as $order) {
                 
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 
-                const result = await response.json();
-                updateProgress(serverId, 100); // 100% of total progress
+                // Read data
+                const reader = response.body.getReader();
+                let bytesReceived = 0;
                 
-                const dataLoss = result.data_integrity ? 0 : 100;
-                debugLog(`Data integrity test: ${dataLoss}% loss`);
-                return dataLoss;
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    bytesReceived += value.length;
+                }
+                
+                const end = performance.now();
+                
+                const duration = (end - start) / 1000; // seconds
+                const speed = (bytesReceived / 1024) / duration; // KB/s
+                
+                return Math.round(speed);
                 
             } catch (error) {
-                debugLog(`Data integrity test failed: ${error.message}`);
-                if (error.name === 'AbortError') {
-                    debugLog('Data integrity test timed out');
-                }
-                updateProgress(serverId, 100);
-                return 100; // 100% loss on error
+                console.log(`Download test failed: ${error.message}`);
+                return 0; // Return 0 on error
             }
         }
         
-        // Generate test data
-        function generateTestData(size) {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-            let result = '';
-            for (let i = 0; i < size; i++) {
-                result += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return result;
-        }
-        
-        // Calculate SHA-256 hash
-        async function calculateHash(data) {
-            const encoder = new TextEncoder();
-            const dataBuffer = encoder.encode(data);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        }
+
         
         // Update test status
         function updateTestStatus(serverId, status, type = 'info') {
@@ -868,52 +678,18 @@ foreach ($orders as $order) {
             if (!metricsElement) return;
             
             // Update individual metrics
-            document.getElementById(`ping-${serverId}`).textContent = results.ping;
-            document.getElementById(`download-${serverId}`).textContent = results.download;
-            document.getElementById(`upload-${serverId}`).textContent = results.upload;
-            document.getElementById(`loss-${serverId}`).textContent = results.dataLoss + '%';
+            document.getElementById(`ping-${serverId}`).textContent = results.ping + ' ms';
+            document.getElementById(`download-${serverId}`).textContent = results.download + ' KB/s';
             
             // Show metrics
             metricsElement.classList.remove('hidden');
             
-            // Update overall quality badge
-            const qualityScore = calculateQualityScore(results);
-            updateQualityBadge(serverId, qualityScore);
+            // Update quality badge based on simple criteria
+            updateQualityBadge(serverId, results);
         }
         
-        // Calculate quality score
-        function calculateQualityScore(results) {
-            let score = 0;
-            
-            // Ping score (lower is better)
-            if (results.ping < 50) score += 25;
-            else if (results.ping < 100) score += 20;
-            else if (results.ping < 200) score += 15;
-            else score += 5;
-            
-            // Download speed score
-            if (results.download > 1000) score += 25;
-            else if (results.download > 500) score += 20;
-            else if (results.download > 200) score += 15;
-            else score += 5;
-            
-            // Upload speed score
-            if (results.upload > 500) score += 25;
-            else if (results.upload > 200) score += 20;
-            else if (results.upload > 100) score += 15;
-            else score += 5;
-            
-            // Data loss score (lower is better)
-            if (results.dataLoss === 0) score += 25;
-            else if (results.dataLoss < 5) score += 15;
-            else if (results.dataLoss < 10) score += 10;
-            else score += 0;
-            
-            return score;
-        }
-        
-        // Update quality badge
-        function updateQualityBadge(serverId, score) {
+        // Update quality badge based on simple criteria
+        function updateQualityBadge(serverId, results) {
             const statusElement = document.getElementById(`test-status-${serverId}`);
             if (!statusElement) return;
             
@@ -921,15 +697,16 @@ foreach ($orders as $order) {
             let icon = 'fa-check-circle';
             let text = 'خوب';
             
-            if (score >= 90) {
+            // Simple scoring: good ping (<100ms) and decent speed (>200 KB/s)
+            if (results.ping < 100 && results.download > 500) {
                 badgeClass = 'speed-badge excellent';
                 icon = 'fa-star';
                 text = 'عالی';
-            } else if (score >= 70) {
+            } else if (results.ping < 200 && results.download > 200) {
                 badgeClass = 'speed-badge good';
                 icon = 'fa-check-circle';
                 text = 'خوب';
-            } else if (score >= 50) {
+            } else if (results.ping < 500 && results.download > 100) {
                 badgeClass = 'speed-badge average';
                 icon = 'fa-clock';
                 text = 'متوسط';
@@ -942,7 +719,7 @@ foreach ($orders as $order) {
             statusElement.innerHTML = `<span class="${badgeClass}"><i class="fas ${icon} ml-1"></i>${text}</span>`;
         }
         
-        // Test all servers with improved scheduling
+        // Test all servers
         function testAllServers() {
             const speedCards = document.querySelectorAll('.speed-card');
             const servers = Array.from(speedCards).map(card => ({
@@ -958,32 +735,12 @@ foreach ($orders as $order) {
             
             showNotification(`شروع تست ${servers.length} سرور...`, 'info');
             
-            // Test servers in batches to avoid overwhelming
-            let currentIndex = 0;
-            const batchSize = MAX_CONCURRENT_TESTS;
-            
-            function testNextBatch() {
-                const batch = servers.slice(currentIndex, currentIndex + batchSize);
-                currentIndex += batchSize;
-                
-                batch.forEach((server, index) => {
-                    setTimeout(() => {
-                        runComprehensiveTest(server.serverId, server.domain, server.port);
-                    }, index * 500); // 500ms delay between tests in same batch
-                });
-                
-                if (currentIndex < servers.length) {
-                    setTimeout(testNextBatch, 5000); // 5 second delay between batches
-                }
-            }
-            
-            testNextBatch();
-        }
-        
-        // Benchmark all servers (more intensive testing)
-        function benchmarkAllServers() {
-            showNotification('شروع تست عملکرد کامل...', 'info');
-            testAllServers();
+            // Test servers one by one with delay
+            servers.forEach((server, index) => {
+                setTimeout(() => {
+                    runSpeedTest(server.serverId, server.domain, server.port);
+                }, index * 2000); // 2 second delay between tests
+            });
         }
         
         // Select speed server

@@ -1191,8 +1191,30 @@ def main():
     server = ThreadedHTTPServer(('0.0.0.0', port), UnifiedDashboardHandler)
     
     # Get server info for display
-    temp_handler = UnifiedDashboardHandler(None, None, None)
-    server_info = temp_handler._get_server_info()
+    def get_server_info_static():
+        """Get server info without creating a handler instance"""
+        try:
+            # Try to get domain from certificate directory
+            domain = None
+            if os.path.exists('/root/cert'):
+                for item in os.listdir('/root/cert'):
+                    item_path = os.path.join('/root/cert', item)
+                    if os.path.isdir(item_path):
+                        if os.path.exists(os.path.join(item_path, 'fullchain.pem')):
+                            domain = item
+                            break
+            
+            if domain:
+                return {'display': domain, 'domain': domain, 'ip': None}
+            else:
+                # Get server IP
+                result = subprocess.run(['curl', '-s', 'ifconfig.me'], capture_output=True, text=True, timeout=5)
+                server_ip = result.stdout.strip() if result.returncode == 0 else 'localhost'
+                return {'display': server_ip, 'domain': None, 'ip': server_ip}
+        except:
+            return {'display': 'localhost', 'domain': None, 'ip': 'localhost'}
+    
+    server_info = get_server_info_static()
     server_display = server_info['display']
     
     if use_ssl:

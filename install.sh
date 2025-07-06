@@ -1185,51 +1185,70 @@ show_installation_summary() {
 main() {
     print_banner
     
-    # Auto-download if not running from git repo
-    if [ ! -f "unified_dashboard.py" ] || [ ! -f "haproxy.cfg" ]; then
-        print_info "Downloading latest version from GitHub..."
-        
-        # Always create a clean core directory structure
-        if [ -d "core" ]; then
-            print_info "Removing existing core directory..."
-            rm -rf core
-        fi
-        
-        # Clone repository
-        git clone https://github.com/mrnimwx/core.git
-        
-        if [ -d "core" ]; then
-            print_success "Downloaded successfully"
-            print_info "Entering core directory..."
-            cd core
-        else
-            print_error "Failed to download repository"
-            exit 1
-        fi
-    elif [ "$(basename "$PWD")" != "core" ]; then
-        # If files exist but we're not in core directory, organize them
-        print_info "Organizing files into core directory..."
+    # Always organize files into proper directory structure
+    if [ "$(basename "$PWD")" != "core" ]; then
+        print_info "Setting up proper directory structure..."
         
         # Create core directory if it doesn't exist
         if [ ! -d "core" ]; then
             mkdir core
         fi
         
-        # Move all relevant files to core directory
-        for file in *.py *.cfg *.sh *.service *.md; do
-            if [ -f "$file" ] && [ "$file" != "install.sh" ]; then
-                mv "$file" core/ 2>/dev/null || true
+        # If files exist in current directory, move them to core
+        if [ -f "unified_dashboard.py" ] || [ -f "haproxy.cfg" ]; then
+            print_info "Moving existing files to core directory..."
+            
+            # Move all relevant files to core directory
+            for file in *.py *.cfg *.sh *.service *.md; do
+                if [ -f "$file" ] && [ "$file" != "install.sh" ]; then
+                    mv "$file" core/ 2>/dev/null || true
+                fi
+            done
+            
+            # Copy install.sh to core as well
+            if [ -f "install.sh" ]; then
+                cp "install.sh" core/
             fi
-        done
-        
-        # Move install.sh to core as well
-        if [ -f "install.sh" ]; then
-            cp "install.sh" core/
+            
+            print_success "Files moved to core directory"
+        else
+            # Download if no files exist
+            print_info "Downloading latest version from GitHub..."
+            
+            # Remove existing core directory
+            if [ -d "core" ]; then
+                rm -rf core
+            fi
+            
+            # Clone repository
+            git clone https://github.com/mrnimwx/core.git
+            
+            if [ ! -d "core" ]; then
+                print_error "Failed to download repository"
+                exit 1
+            fi
+            
+            print_success "Downloaded successfully"
         fi
         
-        print_success "Files organized into core directory"
         print_info "Entering core directory..."
         cd core
+        
+        # Clean up the parent directory (remove the moved files)
+        print_info "Cleaning up parent directory..."
+        cd ..
+        for file in *.py *.cfg *.sh *.service *.md; do
+            if [ -f "$file" ] && [ "$file" != "install.sh" ]; then
+                rm -f "$file" 2>/dev/null || true
+            fi
+        done
+        cd core
+    fi
+    
+    # Verify we have the required files
+    if [ ! -f "unified_dashboard.py" ] || [ ! -f "haproxy.cfg" ]; then
+        print_error "Required files not found. Please check the installation."
+        exit 1
     fi
     
     # Check requirements

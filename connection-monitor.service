@@ -1,0 +1,16 @@
+[Unit]
+Description=Connection Monitor Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+ExecStart=/usr/bin/python3 /root/connection_monitor.py
+Restart=always
+RestartSec=5
+Environment=MONITOR_PASSWORD=admin123
+Environment=MONITOR_PORT=2020
+
+[Install]
+WantedBy=multi-user.target 

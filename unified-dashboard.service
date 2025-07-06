@@ -1,0 +1,16 @@
+[Unit]
+Description=Unified Network Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+ExecStart=/usr/bin/python3 /root/unified_dashboard.py
+Restart=always
+RestartSec=5
+Environment=DASHBOARD_PASSWORD=admin
+Environment=DASHBOARD_PORT=2020
+
+[Install]
+WantedBy=multi-user.target 

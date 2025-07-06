@@ -172,8 +172,8 @@ class UnifiedDashboardHandler(BaseHTTPRequestHandler):
             services = {
                 'haproxy': self._get_service_status('haproxy'),
                 'x-ui': self._get_service_status('x-ui'),
-                'dashboard': self._get_service_status('dashboard'),
-                'connection-monitor': self._get_service_status('connection-monitor')
+                'dashboard': self._get_service_status('unified-dashboard'),
+                'connection-monitor': self._get_service_status('unified-dashboard')  # Same service now
             }
             self._send_json(services)
         except Exception as e:
@@ -354,7 +354,14 @@ class UnifiedDashboardHandler(BaseHTTPRequestHandler):
                             cert_files = []
                             for file in os.listdir(item_path):
                                 if file.endswith(('.pem', '.crt', '.key')):
-                                    cert_files.append(file)
+                                    full_path = os.path.join(item_path, file)
+                                    file_size = os.path.getsize(full_path) if os.path.exists(full_path) else 0
+                                    cert_files.append({
+                                        'name': file,
+                                        'path': full_path,
+                                        'size': file_size,
+                                        'type': 'Certificate' if file.endswith(('.pem', '.crt')) else 'Private Key'
+                                    })
                             if cert_files:
                                 tls_info['certificates'].append({
                                     'domain': item,
@@ -1032,6 +1039,12 @@ class UnifiedDashboardHandler(BaseHTTPRequestHandler):
                         <span class="metric-label">${cert.domain}</span>
                         <span class="metric-value">${cert.files.length} files</span>
                     </div>
+                    ${cert.files.map(file => `
+                        <div class="metric" style="margin-left: 20px; font-size: 0.9em;">
+                            <span class="metric-label">${file.type || file.name}</span>
+                            <span class="metric-value" style="font-family: monospace; font-size: 0.8em;">${file.path || file.name}</span>
+                        </div>
+                    `).join('')}
                 `).join('') || ''}
             `;
         }

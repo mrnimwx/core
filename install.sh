@@ -967,9 +967,29 @@ WantedBy=multi-user.target
 EOF
     fi
     
-    # Stop old services if they exist
-    systemctl stop connection-monitor dashboard 2>/dev/null || true
-    systemctl disable connection-monitor dashboard 2>/dev/null || true
+    # Stop and remove old services if they exist
+    print_info "Cleaning up legacy services..."
+    LEGACY_SERVICES=("connection-monitor" "dashboard" "throughput-test" "legacy-panel")
+    
+    for service in "${LEGACY_SERVICES[@]}"; do
+        if systemctl is-active --quiet "$service" 2>/dev/null; then
+            print_info "Stopping legacy service: $service"
+            systemctl stop "$service" 2>/dev/null || true
+        fi
+        
+        if systemctl is-enabled --quiet "$service" 2>/dev/null; then
+            print_info "Disabling legacy service: $service"
+            systemctl disable "$service" 2>/dev/null || true
+        fi
+        
+        # Remove service file if it exists
+        if [ -f "/etc/systemd/system/$service.service" ]; then
+            print_info "Removing legacy service file: $service.service"
+            rm -f "/etc/systemd/system/$service.service"
+        fi
+    done
+    
+    systemctl daemon-reload
     
     # Start and enable unified service
     systemctl daemon-reload

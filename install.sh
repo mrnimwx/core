@@ -1294,26 +1294,50 @@ EOF
     
     systemctl daemon-reload
     
+    # Stop existing dashboard if running
+    if systemctl is-active --quiet unified-dashboard; then
+        print_info "Stopping existing dashboard service..."
+        systemctl stop unified-dashboard
+        sleep 2
+    fi
+    
     # Start and enable unified service
     systemctl daemon-reload
     systemctl enable unified-dashboard.service
+    
+    # Check for SSL certificates before starting
+    if [ "$USE_HTTPS" = true ] && [ -n "$DOMAIN" ]; then
+        if [ -f "/root/cert/$DOMAIN/fullchain.pem" ] && [ -f "/root/cert/$DOMAIN/privkey.pem" ]; then
+            print_info "SSL certificates found, starting dashboard in HTTPS mode..."
+        else
+            print_warning "SSL certificates not found yet, starting in HTTP mode..."
+            print_info "Dashboard will automatically switch to HTTPS when certificates are available"
+        fi
+    fi
+    
     systemctl start unified-dashboard.service
     
     # Verify service is running
-    sleep 2
+    sleep 3
     if systemctl is-active --quiet unified-dashboard; then
         print_success "Unified Dashboard installed and started successfully"
         
-            # Show appropriate URL based on HTTPS selection
-    if [ "$USE_HTTPS" = true ] && [ -n "$DOMAIN" ]; then
-        print_info "Access URL: https://$DOMAIN:2020/"
-        print_info "Mode: HTTPS with SSL certificate"
-    else
-        SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || echo "your-server-ip")
-        print_info "Access URL: http://$SERVER_IP:2020/"
-        print_info "Mode: HTTP (no SSL)"
-        print_info "💡 You can add SSL later by selecting option 7 from the main menu"
-    fi
+        # Show appropriate URL based on HTTPS selection
+        if [ "$USE_HTTPS" = true ] && [ -n "$DOMAIN" ]; then
+            if [ -f "/root/cert/$DOMAIN/fullchain.pem" ] && [ -f "/root/cert/$DOMAIN/privkey.pem" ]; then
+                print_info "Access URL: https://$DOMAIN:2020/"
+                print_info "Mode: HTTPS with SSL certificate"
+            else
+                print_info "Access URL: http://$DOMAIN:2020/"
+                print_info "Mode: HTTP (waiting for SSL certificates)"
+                print_info "💡 The dashboard will automatically switch to HTTPS when certificates are ready"
+            fi
+        else
+            SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || echo "your-server-ip")
+            print_info "Access URL: http://$SERVER_IP:2020/"
+            print_info "Mode: HTTP (no SSL)"
+            print_info "💡 You can add SSL later by selecting option 8 from the main menu"
+        fi
         print_info "Password: $MONITOR_PASSWORD"
     else
         print_error "Unified Dashboard failed to start"
@@ -1410,11 +1434,22 @@ run_installation() {
     # Update system first
     update_system
     
-    # Install selected components
+    # Install SSL first if selected
+    $INSTALL_SSL_SETUP && setup_ssl
+    
+    # Install other components
     $INSTALL_HAPROXY && install_haproxy
     $INSTALL_XUI && install_xui
     $INSTALL_UNIFIED_DASHBOARD && install_unified_dashboard
-    $INSTALL_SSL_SETUP && setup_ssl
+    
+    # If both dashboard and SSL are installed, restart dashboard to ensure SSL is loaded
+    if $INSTALL_UNIFIED_DASHBOARD && $INSTALL_SSL_SETUP; then
+        if [ -f "/root/cert/$DOMAIN/fullchain.pem" ] && [ -f "/root/cert/$DOMAIN/privkey.pem" ]; then
+            print_info "Restarting dashboard to apply SSL configuration..."
+            systemctl restart unified-dashboard
+            sleep 3
+        fi
+    fi
     
     show_installation_summary
 }

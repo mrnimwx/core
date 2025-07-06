@@ -929,11 +929,14 @@ install_unified_dashboard() {
     
     # Copy unified dashboard script
     if [ -f "unified_dashboard.py" ]; then
-        # Only copy if not already in the target location
-        if [ "$(realpath unified_dashboard.py)" != "/root/unified_dashboard.py" ]; then
+        # Only copy if it's different or doesn't exist
+        if [ ! -f "/root/unified_dashboard.py" ] || ! cmp -s "unified_dashboard.py" "/root/unified_dashboard.py"; then
             cp unified_dashboard.py /root/
+            chmod +x /root/unified_dashboard.py
+            print_info "Dashboard script updated"
+        else
+            print_info "Dashboard script already up to date"
         fi
-        chmod +x /root/unified_dashboard.py
     else
         print_error "unified_dashboard.py not found"
         return 1
@@ -1166,21 +1169,47 @@ main() {
     if [ ! -f "unified_dashboard.py" ] || [ ! -f "haproxy.cfg" ]; then
         print_info "Downloading latest version from GitHub..."
         
-        # Check if we're already in the core directory
-        if [ "$(basename "$PWD")" = "core" ]; then
-            print_info "Already in core directory"
-        else
-            # Download to temporary location and move files
-            if [ -d "core" ]; then
-                rm -rf core
-            fi
-            git clone https://github.com/mrnimwx/core.git
-            
-            # Move files from core to current directory
-            cp -r core/* .
+        # Always create a clean core directory structure
+        if [ -d "core" ]; then
+            print_info "Removing existing core directory..."
             rm -rf core
-            print_success "Downloaded successfully"
         fi
+        
+        # Clone repository
+        git clone https://github.com/mrnimwx/core.git
+        
+        if [ -d "core" ]; then
+            print_success "Downloaded successfully"
+            print_info "Entering core directory..."
+            cd core
+        else
+            print_error "Failed to download repository"
+            exit 1
+        fi
+    elif [ "$(basename "$PWD")" != "core" ]; then
+        # If files exist but we're not in core directory, organize them
+        print_info "Organizing files into core directory..."
+        
+        # Create core directory if it doesn't exist
+        if [ ! -d "core" ]; then
+            mkdir core
+        fi
+        
+        # Move all relevant files to core directory
+        for file in *.py *.cfg *.sh *.service *.md; do
+            if [ -f "$file" ] && [ "$file" != "install.sh" ]; then
+                mv "$file" core/ 2>/dev/null || true
+            fi
+        done
+        
+        # Move install.sh to core as well
+        if [ -f "install.sh" ]; then
+            cp "install.sh" core/
+        fi
+        
+        print_success "Files organized into core directory"
+        print_info "Entering core directory..."
+        cd core
     fi
     
     # Check requirements

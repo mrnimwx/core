@@ -3,7 +3,7 @@
 # =================================================================
 # 🚀 Unified Network Infrastructure Installer
 # =================================================================
-# Interactive installer for HAProxy, X-UI, Connection Monitor, Dashboard
+# Interactive installer for HAProxy, X-UI, Unified Dashboard
 # Choose what you want to install with a simple menu interface
 # =================================================================
 
@@ -29,8 +29,7 @@ XUI_PORT="800"
 # Installation flags
 INSTALL_HAPROXY=false
 INSTALL_XUI=false
-INSTALL_CONNECTION_MONITOR=false
-INSTALL_DASHBOARD=false
+INSTALL_UNIFIED_DASHBOARD=false
 INSTALL_SSL_SETUP=false
 
 # =================================================================
@@ -157,13 +156,12 @@ show_main_menu() {
     
     echo -e "  ${GREEN}1)${NC} HAProxy Load Balancer"
     echo -e "  ${GREEN}2)${NC} X-UI Panel"
-    echo -e "  ${GREEN}3)${NC} Connection Monitor"
-    echo -e "  ${GREEN}4)${NC} Network Dashboard"
-    echo -e "  ${GREEN}5)${NC} SSL/TLS Setup"
-    echo -e "  ${GREEN}6)${NC} Install All Components"
-    echo -e "  ${GREEN}7)${NC} Custom Selection"
+    echo -e "  ${GREEN}3)${NC} Unified Dashboard"
+    echo -e "  ${GREEN}4)${NC} SSL/TLS Setup"
+    echo -e "  ${GREEN}5)${NC} Install All Components"
+    echo -e "  ${GREEN}6)${NC} Custom Selection"
     echo
-    echo -e "  ${RED}8)${NC} Uninstall Components"
+    echo -e "  ${RED}7)${NC} Uninstall Components"
     echo
     echo -e "  ${GREEN}0)${NC} Exit"
     echo
@@ -172,7 +170,7 @@ show_main_menu() {
 get_user_choice() {
     while true; do
         show_main_menu
-        read -p "Enter your choice (0-8): " choice
+        read -p "Enter your choice (0-7): " choice
         
         case $choice in
             1)
@@ -186,37 +184,31 @@ get_user_choice() {
                 break
                 ;;
             3)
-                INSTALL_CONNECTION_MONITOR=true
-                get_monitor_config
+                INSTALL_UNIFIED_DASHBOARD=true
+                get_dashboard_config
                 confirm_and_install
                 break
                 ;;
             4)
-                INSTALL_DASHBOARD=true
-                confirm_and_install
-                break
-                ;;
-            5)
                 INSTALL_SSL_SETUP=true
                 get_ssl_config
                 confirm_and_install
                 break
                 ;;
-            6)
+            5)
                 INSTALL_HAPROXY=true
                 INSTALL_XUI=true
-                INSTALL_CONNECTION_MONITOR=true
-                INSTALL_DASHBOARD=true
+                INSTALL_UNIFIED_DASHBOARD=true
                 INSTALL_SSL_SETUP=true
                 get_full_config
                 confirm_and_install
                 break
                 ;;
-            7)
+            6)
                 custom_selection
                 break
                 ;;
-            8)
+            7)
                 show_uninstall_menu
                 break
                 ;;
@@ -246,18 +238,13 @@ custom_selection() {
     echo
     [[ $REPLY =~ ^[Yy]$ ]] && INSTALL_XUI=true
     
-    # Connection Monitor
-    read -p "Install Connection Monitor? (y/N): " -n 1 -r
+    # Unified Dashboard
+    read -p "Install Unified Dashboard? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        INSTALL_CONNECTION_MONITOR=true
-        get_monitor_config
+        INSTALL_UNIFIED_DASHBOARD=true
+        get_dashboard_config
     fi
-    
-    # Dashboard
-    read -p "Install Network Dashboard? (y/N): " -n 1 -r
-    echo
-    [[ $REPLY =~ ^[Yy]$ ]] && INSTALL_DASHBOARD=true
     
     # SSL Setup
     read -p "Setup SSL/TLS certificates? (y/N): " -n 1 -r
@@ -270,17 +257,17 @@ custom_selection() {
     confirm_and_install
 }
 
-get_monitor_config() {
+get_dashboard_config() {
     echo
-    print_section "Connection Monitor Configuration"
+    print_section "Unified Dashboard Configuration"
     
-    # Get monitor password
-    read -p "Enter password for connection monitor (default: admin123): " monitor_pass
-    if [ -n "$monitor_pass" ]; then
-        MONITOR_PASSWORD="$monitor_pass"
+    # Get dashboard password
+    read -p "Enter password for unified dashboard (default: admin): " dashboard_pass
+    if [ -n "$dashboard_pass" ]; then
+        MONITOR_PASSWORD="$dashboard_pass"
     fi
     
-    print_info "Monitor password set to: $MONITOR_PASSWORD"
+    print_info "Dashboard password set to: $MONITOR_PASSWORD"
 }
 
 get_ssl_config() {
@@ -305,10 +292,10 @@ get_full_config() {
     echo
     print_section "Full Installation Configuration"
     
-    # Get monitor password
-    read -p "Enter password for connection monitor (default: admin123): " monitor_pass
-    if [ -n "$monitor_pass" ]; then
-        MONITOR_PASSWORD="$monitor_pass"
+    # Get dashboard password
+    read -p "Enter password for unified dashboard (default: admin): " dashboard_pass
+    if [ -n "$dashboard_pass" ]; then
+        MONITOR_PASSWORD="$dashboard_pass"
     fi
     
     # Get domain for SSL
@@ -330,8 +317,7 @@ confirm_and_install() {
     echo "Components to install:"
     $INSTALL_HAPROXY && echo -e "  ${GREEN}✓${NC} HAProxy Load Balancer"
     $INSTALL_XUI && echo -e "  ${GREEN}✓${NC} X-UI Panel"
-    $INSTALL_CONNECTION_MONITOR && echo -e "  ${GREEN}✓${NC} Connection Monitor (Password: $MONITOR_PASSWORD)"
-    $INSTALL_DASHBOARD && echo -e "  ${GREEN}✓${NC} Network Dashboard"
+    $INSTALL_UNIFIED_DASHBOARD && echo -e "  ${GREEN}✓${NC} Unified Dashboard (Password: $MONITOR_PASSWORD)"
     $INSTALL_SSL_SETUP && echo -e "  ${GREEN}✓${NC} SSL/TLS Setup (Domain: $DOMAIN)"
     
     echo
@@ -787,92 +773,64 @@ EOF
     print_info "Password: $XUI_PASSWORD"
 }
 
-install_connection_monitor() {
-    print_section "Installing Connection Monitor"
+install_unified_dashboard() {
+    print_section "Installing Unified Dashboard"
     
-    print_info "Installing connection monitor files..."
+    print_info "Installing unified dashboard files..."
     
-    # Copy connection monitor script
-    if [ -f "connection_monitor.py" ]; then
-        cp connection_monitor.py /root/
-        chmod +x /root/connection_monitor.py
+    # Copy unified dashboard script
+    if [ -f "unified_dashboard.py" ]; then
+        cp unified_dashboard.py /root/
+        chmod +x /root/unified_dashboard.py
     else
-        print_error "connection_monitor.py not found"
+        print_error "unified_dashboard.py not found"
         return 1
     fi
     
-    # Create systemd service
-    cat > /etc/systemd/system/connection-monitor.service << EOF
-[Unit]
-Description=Connection Monitor Dashboard
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/root
-ExecStart=/usr/bin/python3 /root/connection_monitor.py
-Restart=always
-RestartSec=5
-Environment=MONITOR_PASSWORD=$MONITOR_PASSWORD
-Environment=MONITOR_PORT=2020
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    
-    # Start and enable service
-    systemctl daemon-reload
-    systemctl enable connection-monitor.service
-    systemctl start connection-monitor.service
-    
-    print_success "Connection Monitor installed and started"
-    print_info "Access URL: https://$(curl -s ifconfig.me):2020/"
-    print_info "Password: $MONITOR_PASSWORD"
-}
-
-install_dashboard() {
-    print_section "Installing Network Dashboard"
-    
-    print_info "Installing dashboard files..."
-    
-    # Copy dashboard script if available
-    if [ -f "dashboard.py" ]; then
-        cp dashboard.py /root/
-        chmod +x /root/dashboard.py
-        
-        # Copy service file
-        if [ -f "dashboard.service" ]; then
-            cp dashboard.service /etc/systemd/system/
-        else
-            # Create default service file
-            cat > /etc/systemd/system/dashboard.service << 'EOF'
-[Unit]
-Description=Network Infrastructure Dashboard
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/root
-ExecStart=/usr/bin/python3 /root/dashboard.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-        fi
-        
-        # Start and enable service
-        systemctl daemon-reload
-        systemctl enable dashboard.service
-        systemctl start dashboard.service
-        
-        print_success "Network Dashboard installed and started"
-        print_info "Access URL: http://$(curl -s ifconfig.me):3030/"
+    # Copy service file
+    if [ -f "unified-dashboard.service" ]; then
+        cp unified-dashboard.service /etc/systemd/system/
     else
-        print_warning "dashboard.py not found - skipping dashboard installation"
+        # Create default service file
+        cat > /etc/systemd/system/unified-dashboard.service << EOF
+[Unit]
+Description=Unified Network Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+ExecStart=/usr/bin/python3 /root/unified_dashboard.py
+Restart=always
+RestartSec=5
+Environment=DASHBOARD_PASSWORD=$MONITOR_PASSWORD
+Environment=DASHBOARD_PORT=2020
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    fi
+    
+    # Stop old services if they exist
+    systemctl stop connection-monitor dashboard 2>/dev/null || true
+    systemctl disable connection-monitor dashboard 2>/dev/null || true
+    
+    # Start and enable unified service
+    systemctl daemon-reload
+    systemctl enable unified-dashboard.service
+    systemctl start unified-dashboard.service
+    
+    # Verify service is running
+    sleep 2
+    if systemctl is-active --quiet unified-dashboard; then
+        print_success "Unified Dashboard installed and started successfully"
+        print_info "Access URL: https://$(curl -s ifconfig.me):2020/"
+        print_info "Password: $MONITOR_PASSWORD"
+    else
+        print_error "Unified Dashboard failed to start"
+        print_info "Check logs with: journalctl -u unified-dashboard -f"
+        return 1
     fi
 }
 
@@ -908,8 +866,7 @@ run_installation() {
     # Install selected components
     $INSTALL_HAPROXY && install_haproxy
     $INSTALL_XUI && install_xui
-    $INSTALL_CONNECTION_MONITOR && install_connection_monitor
-    $INSTALL_DASHBOARD && install_dashboard
+    $INSTALL_UNIFIED_DASHBOARD && install_unified_dashboard
     $INSTALL_SSL_SETUP && setup_ssl
     
     show_installation_summary
@@ -937,19 +894,11 @@ show_installation_summary() {
         fi
     fi
     
-    if $INSTALL_CONNECTION_MONITOR; then
-        if systemctl is-active --quiet connection-monitor; then
-            echo -e "  ${GREEN}✓${NC} Connection Monitor: Running"
+    if $INSTALL_UNIFIED_DASHBOARD; then
+        if systemctl is-active --quiet unified-dashboard; then
+            echo -e "  ${GREEN}✓${NC} Unified Dashboard: Running"
         else
-            echo -e "  ${RED}✗${NC} Connection Monitor: Stopped"
-        fi
-    fi
-    
-    if $INSTALL_DASHBOARD; then
-        if systemctl is-active --quiet dashboard; then
-            echo -e "  ${GREEN}✓${NC} Network Dashboard: Running"
-        else
-            echo -e "  ${RED}✗${NC} Network Dashboard: Stopped"
+            echo -e "  ${RED}✗${NC} Unified Dashboard: Stopped"
         fi
     fi
     
@@ -959,21 +908,19 @@ show_installation_summary() {
     SERVER_IP=$(curl -s ifconfig.me)
     
     $INSTALL_XUI && echo -e "  ${CYAN}🌐${NC} X-UI Panel: http://$SERVER_IP:$XUI_PORT/"
-    $INSTALL_CONNECTION_MONITOR && echo -e "  ${CYAN}📊${NC} Connection Monitor: https://$SERVER_IP:2020/"
-    $INSTALL_DASHBOARD && echo -e "  ${CYAN}📈${NC} Network Dashboard: http://$SERVER_IP:3030/"
+    $INSTALL_UNIFIED_DASHBOARD && echo -e "  ${CYAN}📊${NC} Unified Dashboard: https://$SERVER_IP:2020/"
     $INSTALL_HAPROXY && echo -e "  ${CYAN}🔀${NC} HAProxy Ports: 8080, 8082, 8083, 8084, 8085, 8086"
     
     echo
     echo -e "${WHITE}Management Commands:${NC}"
     $INSTALL_HAPROXY && echo -e "  ${CYAN}▶${NC} HAProxy: systemctl status haproxy"
     $INSTALL_XUI && echo -e "  ${CYAN}▶${NC} X-UI: x-ui"
-    $INSTALL_CONNECTION_MONITOR && echo -e "  ${CYAN}▶${NC} Connection Monitor: systemctl status connection-monitor"
-    $INSTALL_DASHBOARD && echo -e "  ${CYAN}▶${NC} Dashboard: systemctl status dashboard"
+    $INSTALL_UNIFIED_DASHBOARD && echo -e "  ${CYAN}▶${NC} Unified Dashboard: systemctl status unified-dashboard"
     
     echo
     echo -e "${WHITE}Credentials:${NC}"
     $INSTALL_XUI && echo -e "  ${CYAN}🔑${NC} X-UI: $XUI_USERNAME / $XUI_PASSWORD"
-    $INSTALL_CONNECTION_MONITOR && echo -e "  ${CYAN}🔑${NC} Connection Monitor: any-username / $MONITOR_PASSWORD"
+    $INSTALL_UNIFIED_DASHBOARD && echo -e "  ${CYAN}🔑${NC} Unified Dashboard: any-username / $MONITOR_PASSWORD"
     
     echo
     print_success "All selected components have been installed and configured!"
@@ -986,6 +933,16 @@ show_installation_summary() {
 
 main() {
     print_banner
+    
+    # Auto-download if not running from git repo
+    if [ ! -f "unified_dashboard.py" ] || [ ! -f "haproxy.cfg" ]; then
+        print_info "Downloading latest version from GitHub..."
+        if [ -d "core" ]; then
+            rm -rf core
+        fi
+        git clone https://github.com/mrnimwx/core.git && cd core
+        print_success "Downloaded successfully"
+    fi
     
     # Check requirements
     check_root

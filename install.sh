@@ -648,23 +648,27 @@ install_haproxy() {
     
     print_info "Configuring HAProxy..."
     
-    # Use local haproxy.cfg if available, otherwise create default
-    if [ -f "haproxy.cfg" ]; then
-        cp haproxy.cfg /etc/haproxy/haproxy.cfg
-        print_info "Using local HAProxy configuration"
-    else
-        cat > /etc/haproxy/haproxy.cfg << 'EOF'
+    # Create proper HAProxy configuration
+    print_info "Creating HAProxy configuration..."
+    
+    # Ensure directory exists
+    mkdir -p /etc/haproxy
+    
+    # Create the configuration file
+    cat > /etc/haproxy/haproxy.cfg << 'EOF'
 # HAProxy Configuration
 global
     daemon
     user haproxy
     group haproxy
+    log stdout local0
 
 defaults
     mode tcp
     timeout connect 10s
     timeout client 1m
     timeout server 1m
+    log global
 
 frontend incoming
     bind *:8080
@@ -699,15 +703,36 @@ backend sv5
 backend sv1
     server sv1 10.0.0.9:8086
 EOF
-        print_info "Created default HAProxy configuration"
+    
+    # Set proper permissions
+    chmod 644 /etc/haproxy/haproxy.cfg
+    chown root:root /etc/haproxy/haproxy.cfg
+    
+    print_info "HAProxy configuration created successfully"
+    
+    # Test HAProxy configuration
+    print_info "Testing HAProxy configuration..."
+    if haproxy -c -f /etc/haproxy/haproxy.cfg; then
+        print_success "HAProxy configuration is valid"
+    else
+        print_error "HAProxy configuration is invalid"
+        return 1
     fi
     
     # Start and enable HAProxy
     systemctl enable haproxy
     systemctl restart haproxy
     
-    print_success "HAProxy installed and started"
-    print_info "Listening on ports: 8080, 8082, 8083, 8084, 8085, 8086"
+    # Verify HAProxy is running
+    sleep 2
+    if systemctl is-active --quiet haproxy; then
+        print_success "HAProxy installed and started successfully"
+        print_info "Listening on ports: 8080, 8082, 8083, 8084, 8085, 8086"
+    else
+        print_error "HAProxy failed to start"
+        print_info "Check logs with: journalctl -u haproxy -f"
+        return 1
+    fi
 }
 
 install_xui() {

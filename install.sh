@@ -380,7 +380,7 @@ update_system() {
     apt update
     
     print_info "Installing essential packages..."
-    apt install -y curl wget unzip python3 python3-pip netstat-ss
+    apt install -y curl wget unzip python3 python3-pip net-tools
     
     print_success "System updated successfully"
 }

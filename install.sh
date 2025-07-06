@@ -400,22 +400,43 @@ add_ssl_to_dashboard() {
     if [ "$USE_HTTPS" = true ] && [ -n "$DOMAIN" ]; then
         print_section "Configuring SSL for Dashboard"
         
-        # The unified dashboard will automatically detect SSL certificates
-        # We just need to restart it to pick up the new configuration
-        print_info "Restarting dashboard to enable HTTPS..."
-        systemctl restart unified-dashboard
+        # Check if certificates exist, if not, set them up
+        if [ ! -f "/root/cert/$DOMAIN/fullchain.pem" ] || [ ! -f "/root/cert/$DOMAIN/privkey.pem" ]; then
+            print_info "SSL certificates not found. Setting up certificates..."
+            INSTALL_SSL_SETUP=true
+            setup_ssl
+        fi
         
-        sleep 3
-        
-        if systemctl is-active --quiet unified-dashboard; then
-            print_success "Dashboard updated successfully!"
-            echo
-            print_info "🔒 Dashboard is now available at: https://$DOMAIN:2020/"
-            print_info "🔑 Password: $(systemctl show unified-dashboard -p Environment | grep DASHBOARD_PASSWORD | cut -d'=' -f3)"
-            echo
-            print_info "The dashboard automatically detects SSL certificates and enables HTTPS"
+        # Check again if certificates exist after setup
+        if [ -f "/root/cert/$DOMAIN/fullchain.pem" ] && [ -f "/root/cert/$DOMAIN/privkey.pem" ]; then
+            print_info "SSL certificates found. Restarting dashboard to enable HTTPS..."
+            systemctl restart unified-dashboard
+            
+            sleep 3
+            
+            if systemctl is-active --quiet unified-dashboard; then
+                print_success "Dashboard updated successfully!"
+                echo
+                print_info "🔒 Dashboard is now available at: https://$DOMAIN:2020/"
+                # Get password from service environment
+                CURRENT_PASSWORD=$(systemctl show unified-dashboard -p Environment --value | grep DASHBOARD_PASSWORD | cut -d'=' -f2)
+                if [ -z "$CURRENT_PASSWORD" ]; then
+                    CURRENT_PASSWORD="admin"
+                fi
+                print_info "🔑 Password: $CURRENT_PASSWORD"
+                echo
+                print_info "The dashboard automatically detects SSL certificates and enables HTTPS"
+            else
+                print_error "Failed to restart dashboard. Check logs: journalctl -u unified-dashboard -f"
+            fi
         else
-            print_error "Failed to restart dashboard. Check logs: journalctl -u unified-dashboard -f"
+            print_warning "SSL certificates not found or setup failed."
+            print_info "Dashboard remains in HTTP mode."
+            echo
+            print_info "To manually add certificates, place them in:"
+            print_info "  Certificate: /root/cert/$DOMAIN/fullchain.pem"
+            print_info "  Private Key: /root/cert/$DOMAIN/privkey.pem"
+            print_info "Then restart the dashboard: systemctl restart unified-dashboard"
         fi
     else
         print_info "No SSL configuration selected. Dashboard remains in HTTP mode."
@@ -975,17 +996,76 @@ setup_ssl() {
     
     print_info "Setting up SSL for domain: $DOMAIN"
     
+    # Check if certificates already exist
+    if [ -d "/root/cert/$DOMAIN" ] && [ -f "/root/cert/$DOMAIN/fullchain.pem" ] && [ -f "/root/cert/$DOMAIN/privkey.pem" ]; then
+        print_success "SSL certificates already exist for $DOMAIN"
+        return
+    fi
+    
     # Install certbot if not available
     if ! command -v certbot &> /dev/null; then
         print_info "Installing Certbot..."
+        apt update
         apt install -y certbot
     fi
     
     # Create certificate directory
     mkdir -p /root/cert/$DOMAIN
     
-    print_info "SSL setup completed for $DOMAIN"
-    print_warning "Note: You may need to manually configure certificates"
+    echo
+    print_info "SSL Certificate Setup Options:"
+    echo "1) Use Certbot (automatic with Let's Encrypt)"
+    echo "2) Manual certificate placement"
+    echo "3) Skip SSL setup"
+    echo
+    
+    read -p "Choose option (1-3): " ssl_choice
+    
+    case $ssl_choice in
+        1)
+            print_info "Setting up Let's Encrypt certificate..."
+            echo
+            print_warning "Make sure your domain $DOMAIN points to this server's IP address"
+            echo
+            read -p "Continue with automatic certificate generation? (y/N): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                # Stop services that might use port 80
+                systemctl stop nginx apache2 2>/dev/null || true
+                
+                # Generate certificate
+                certbot certonly --standalone --non-interactive --agree-tos --register-unsafely-without-email -d "$DOMAIN"
+                
+                # Copy certificates to our directory
+                if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+                    cp "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" "/root/cert/$DOMAIN/"
+                    cp "/etc/letsencrypt/live/$DOMAIN/privkey.pem" "/root/cert/$DOMAIN/"
+                    chmod 600 "/root/cert/$DOMAIN/privkey.pem"
+                    print_success "SSL certificate generated and installed for $DOMAIN"
+                else
+                    print_error "Failed to generate SSL certificate"
+                    print_info "Please check that your domain points to this server"
+                fi
+            else
+                print_info "SSL certificate generation skipped"
+            fi
+            ;;
+        2)
+            print_info "Manual certificate setup selected"
+            echo
+            print_info "Please place your SSL certificate files in:"
+            print_info "  Certificate: /root/cert/$DOMAIN/fullchain.pem"
+            print_info "  Private Key: /root/cert/$DOMAIN/privkey.pem"
+            echo
+            print_info "The dashboard will automatically detect and use these certificates"
+            ;;
+        3)
+            print_info "SSL setup skipped"
+            ;;
+        *)
+            print_warning "Invalid choice. SSL setup skipped"
+            ;;
+    esac
 }
 
 run_installation() {

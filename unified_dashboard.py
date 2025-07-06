@@ -1027,7 +1027,7 @@ class UnifiedDashboardHandler(BaseHTTPRequestHandler):
                     <span class="metric-value">${tls.paths?.length || 0}</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-label">Certificates Found</span>
+                    <span class="metric-label">Domains with SSL</span>
                     <span class="metric-value">${tls.certificates?.length || 0}</span>
                 </div>
                 <div class="metric">
@@ -1037,12 +1037,12 @@ class UnifiedDashboardHandler(BaseHTTPRequestHandler):
                 ${tls.certificates?.map(cert => `
                     <div class="metric">
                         <span class="metric-label">${cert.domain}</span>
-                        <span class="metric-value">${cert.files.length} files</span>
+                        <span class="metric-value">SSL Certificate</span>
                     </div>
-                    ${cert.files.map(file => `
+                    ${cert.files.filter(file => file.name === 'fullchain.pem' || file.name === 'privkey.pem').map(file => `
                         <div class="metric" style="margin-left: 20px; font-size: 0.9em;">
-                            <span class="metric-label">${file.type || file.name}</span>
-                            <span class="metric-value" style="font-family: monospace; font-size: 0.8em;">${file.path || file.name}</span>
+                            <span class="metric-label">${file.name}</span>
+                            <span class="metric-value" style="font-family: monospace; font-size: 0.8em;">${file.path}</span>
                         </div>
                     `).join('')}
                 `).join('') || ''}

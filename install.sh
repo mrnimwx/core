@@ -1185,63 +1185,35 @@ show_installation_summary() {
 main() {
     print_banner
     
-    # Always organize files into proper directory structure
+    # Always ensure fresh installation
     if [ "$(basename "$PWD")" != "core" ]; then
-        print_info "Setting up proper directory structure..."
+        print_info "Setting up fresh installation..."
         
-        # Create core directory if it doesn't exist
-        if [ ! -d "core" ]; then
-            mkdir core
+        # Always remove existing core directory for fresh install
+        if [ -d "core" ]; then
+            print_info "Removing existing core directory..."
+            rm -rf core
         fi
         
-        # If files exist in current directory, move them to core
-        if [ -f "unified_dashboard.py" ] || [ -f "haproxy.cfg" ]; then
-            print_info "Moving existing files to core directory..."
-            
-            # Move all relevant files to core directory
-            for file in *.py *.cfg *.sh *.service *.md; do
-                if [ -f "$file" ] && [ "$file" != "install.sh" ]; then
-                    mv "$file" core/ 2>/dev/null || true
-                fi
-            done
-            
-            # Copy install.sh to core as well
-            if [ -f "install.sh" ]; then
-                cp "install.sh" core/
-            fi
-            
-            print_success "Files moved to core directory"
-        else
-            # Download if no files exist
-            print_info "Downloading latest version from GitHub..."
-            
-            # Remove existing core directory
-            if [ -d "core" ]; then
-                rm -rf core
-            fi
-            
-            # Clone repository
-            git clone https://github.com/mrnimwx/core.git
-            
-            if [ ! -d "core" ]; then
-                print_error "Failed to download repository"
-                exit 1
-            fi
-            
-            print_success "Downloaded successfully"
-        fi
-        
-        print_info "Entering core directory..."
-        cd core
-        
-        # Clean up the parent directory (remove the moved files)
-        print_info "Cleaning up parent directory..."
-        cd ..
+        # Clean up any scattered files in current directory
+        print_info "Cleaning up existing files..."
         for file in *.py *.cfg *.sh *.service *.md; do
             if [ -f "$file" ] && [ "$file" != "install.sh" ]; then
                 rm -f "$file" 2>/dev/null || true
             fi
         done
+        
+        # Download fresh copy
+        print_info "Downloading latest version from GitHub..."
+        git clone https://github.com/mrnimwx/core.git
+        
+        if [ ! -d "core" ]; then
+            print_error "Failed to download repository"
+            exit 1
+        fi
+        
+        print_success "Downloaded successfully"
+        print_info "Entering core directory..."
         cd core
     fi
     

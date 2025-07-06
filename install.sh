@@ -27,6 +27,8 @@ MONITOR_PASSWORD="admin"
 XUI_USERNAME="admin"
 XUI_PASSWORD="admin"
 XUI_PORT="800"
+USE_DOMAIN_BACKENDS=false
+BACKEND_DOMAIN=""
 
 # Installation flags
 INSTALL_HAPROXY=false
@@ -249,6 +251,7 @@ get_user_choice() {
         case $choice in
             1)
                 INSTALL_HAPROXY=true
+                get_haproxy_config
                 confirm_and_install
                 break
                 ;;
@@ -275,6 +278,7 @@ get_user_choice() {
                 INSTALL_XUI=true
                 INSTALL_UNIFIED_DASHBOARD=true
                 INSTALL_SSL_SETUP=true
+                get_haproxy_config
                 select_domain_interactive
                 get_full_config
                 confirm_and_install
@@ -311,7 +315,10 @@ custom_selection() {
     # HAProxy
     read -p "Install HAProxy Load Balancer? (y/N): " -n 1 -r
     echo
-    [[ $REPLY =~ ^[Yy]$ ]] && INSTALL_HAPROXY=true
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        INSTALL_HAPROXY=true
+        get_haproxy_config
+    fi
     
     # X-UI
     read -p "Install X-UI Panel? (y/N): " -n 1 -r
@@ -367,6 +374,36 @@ get_ssl_config() {
     fi
     
     print_info "SSL will be configured for domain: $DOMAIN"
+}
+
+get_haproxy_config() {
+    echo
+    print_section "HAProxy Configuration"
+    
+    echo "Choose HAProxy backend configuration:"
+    echo "1) Internal IP addresses (default: 10.8.0.x)"
+    echo "2) Domain-based backends (plus1.yourdomain.com, plus2.yourdomain.com, etc.)"
+    echo
+    
+    read -p "Enter your choice (1-2): " haproxy_choice
+    
+    case $haproxy_choice in
+        2)
+            USE_DOMAIN_BACKENDS=true
+            read -p "Enter your main domain (e.g., google.com): " backend_domain
+            if [ -n "$backend_domain" ]; then
+                BACKEND_DOMAIN="$backend_domain"
+                print_info "Will use domain-based backends: plus1.$backend_domain, plus2.$backend_domain, etc."
+            else
+                print_warning "No domain provided. Using default internal IP configuration."
+                USE_DOMAIN_BACKENDS=false
+            fi
+            ;;
+        1|*)
+            USE_DOMAIN_BACKENDS=false
+            print_info "Will use internal IP addresses (10.8.0.x)"
+            ;;
+    esac
 }
 
 get_full_config() {
@@ -458,7 +495,13 @@ confirm_and_install() {
     echo -e "${WHITE}Installation Summary${NC}\n"
     
     echo "Components to install:"
-    $INSTALL_HAPROXY && echo -e "  ${GREEN}✓${NC} HAProxy Load Balancer"
+    if $INSTALL_HAPROXY; then
+        if [ "$USE_DOMAIN_BACKENDS" = true ] && [ -n "$BACKEND_DOMAIN" ]; then
+            echo -e "  ${GREEN}✓${NC} HAProxy Load Balancer (Domain backends: $BACKEND_DOMAIN)"
+        else
+            echo -e "  ${GREEN}✓${NC} HAProxy Load Balancer (Internal IP backends)"
+        fi
+    fi
     $INSTALL_XUI && echo -e "  ${GREEN}✓${NC} X-UI Panel"
     if $INSTALL_UNIFIED_DASHBOARD; then
         if [ "$USE_HTTPS" = true ] && [ -n "$DOMAIN" ]; then
@@ -772,6 +815,10 @@ update_system() {
     print_info "Installing essential packages..."
     apt install -y curl wget unzip python3 python3-pip net-tools
     
+    # Disable UFW firewall
+    print_info "Disabling UFW firewall..."
+    ufw --force disable 2>/dev/null || true
+    
     print_success "System updated successfully"
 }
 
@@ -789,9 +836,61 @@ install_haproxy() {
     # Ensure directory exists
     mkdir -p /etc/haproxy
     
-    # Create the configuration file
-    cat > /etc/haproxy/haproxy.cfg << 'EOF'
-# HAProxy Configuration
+    # Create the configuration file based on user choice
+    if [ "$USE_DOMAIN_BACKENDS" = true ] && [ -n "$BACKEND_DOMAIN" ]; then
+        print_info "Creating domain-based HAProxy configuration for: $BACKEND_DOMAIN"
+        cat > /etc/haproxy/haproxy.cfg << EOF
+# HAProxy Configuration - Domain-based Backends
+global
+    daemon
+    user haproxy
+    group haproxy
+    log stdout local0
+
+defaults
+    mode tcp
+    timeout connect 10s
+    timeout client 1m
+    timeout server 1m
+    log global
+
+frontend incoming
+    bind *:8080
+    bind *:8082
+    bind *:8083
+    bind *:8084
+    bind *:8085
+    bind *:8086
+
+    use_backend sv6 if { dst_port 8080 }
+    use_backend sv2 if { dst_port 8082 }
+    use_backend sv3 if { dst_port 8083 }
+    use_backend sv4 if { dst_port 8084 }
+    use_backend sv5 if { dst_port 8085 }
+    use_backend sv1 if { dst_port 8086 }
+
+backend sv6
+    server sv6 plus6.$BACKEND_DOMAIN:8080
+
+backend sv2
+    server sv2 plus2.$BACKEND_DOMAIN:8082
+
+backend sv3
+    server sv3 plus3.$BACKEND_DOMAIN:8083
+
+backend sv4
+    server sv4 plus4.$BACKEND_DOMAIN:8084
+
+backend sv5
+    server sv5 plus5.$BACKEND_DOMAIN:8085
+
+backend sv1
+    server sv1 plus1.$BACKEND_DOMAIN:8086
+EOF
+    else
+        print_info "Creating internal IP HAProxy configuration"
+        cat > /etc/haproxy/haproxy.cfg << 'EOF'
+# HAProxy Configuration - Internal IP Backends
 global
     daemon
     user haproxy
@@ -838,6 +937,7 @@ backend sv5
 backend sv1
     server sv1 10.0.0.9:8086
 EOF
+    fi
     
     # Set proper permissions
     chmod 644 /etc/haproxy/haproxy.cfg

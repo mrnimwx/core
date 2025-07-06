@@ -929,7 +929,10 @@ install_unified_dashboard() {
     
     # Copy unified dashboard script
     if [ -f "unified_dashboard.py" ]; then
-        cp unified_dashboard.py /root/
+        # Only copy if not already in the target location
+        if [ "$(realpath unified_dashboard.py)" != "/root/unified_dashboard.py" ]; then
+            cp unified_dashboard.py /root/
+        fi
         chmod +x /root/unified_dashboard.py
     else
         print_error "unified_dashboard.py not found"

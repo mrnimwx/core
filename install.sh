@@ -153,42 +153,18 @@ auto_detect_domain() {
 show_main_menu() {
     print_banner
     
-    echo -e "${WHITE}Choose components to install:${NC}\n"
+    echo -e "${WHITE}Choose an option:${NC}\n"
     
     echo -e "  ${GREEN}1)${NC} HAProxy Load Balancer"
-    echo -e "     ${CYAN}▶${NC} High-performance TCP/HTTP load balancer"
-    echo -e "     ${CYAN}▶${NC} Configures ports 8080-8086"
-    echo
-    
     echo -e "  ${GREEN}2)${NC} X-UI Panel"
-    echo -e "     ${CYAN}▶${NC} Web-based V2Ray/Xray management panel"
-    echo -e "     ${CYAN}▶${NC} Easy proxy configuration interface"
-    echo
-    
     echo -e "  ${GREEN}3)${NC} Connection Monitor"
-    echo -e "     ${CYAN}▶${NC} Real-time connection monitoring on port 2020"
-    echo -e "     ${CYAN}▶${NC} HAProxy status, TLS info, connection stats"
-    echo -e "     ${CYAN}▶${NC} Password protected dashboard"
-    echo
-    
     echo -e "  ${GREEN}4)${NC} Network Dashboard"
-    echo -e "     ${CYAN}▶${NC} Comprehensive network monitoring on port 3030"
-    echo -e "     ${CYAN}▶${NC} Service status, traffic stats, system info"
-    echo
-    
     echo -e "  ${GREEN}5)${NC} SSL/TLS Setup"
-    echo -e "     ${CYAN}▶${NC} Automated SSL certificate management"
-    echo -e "     ${CYAN}▶${NC} Let's Encrypt integration"
-    echo
-    
     echo -e "  ${GREEN}6)${NC} Install All Components"
-    echo -e "     ${CYAN}▶${NC} Full infrastructure setup"
-    echo
-    
     echo -e "  ${GREEN}7)${NC} Custom Selection"
-    echo -e "     ${CYAN}▶${NC} Choose specific components"
     echo
-    
+    echo -e "  ${RED}8)${NC} Uninstall Components"
+    echo
     echo -e "  ${GREEN}0)${NC} Exit"
     echo
 }
@@ -196,7 +172,7 @@ show_main_menu() {
 get_user_choice() {
     while true; do
         show_main_menu
-        read -p "Enter your choice (0-7): " choice
+        read -p "Enter your choice (0-8): " choice
         
         case $choice in
             1)
@@ -240,8 +216,12 @@ get_user_choice() {
                 custom_selection
                 break
                 ;;
+            8)
+                show_uninstall_menu
+                break
+                ;;
             0)
-                print_info "Installation cancelled"
+                print_info "Operation cancelled"
                 exit 0
                 ;;
             *)
@@ -367,6 +347,281 @@ confirm_and_install() {
         print_info "Installation cancelled"
         exit 0
     fi
+}
+
+# =================================================================
+# Uninstall Functions
+# =================================================================
+
+show_uninstall_menu() {
+    print_banner
+    
+    echo -e "${WHITE}Choose components to uninstall:${NC}\n"
+    
+    echo -e "  ${RED}1)${NC} HAProxy Load Balancer"
+    echo -e "  ${RED}2)${NC} X-UI Panel"
+    echo -e "  ${RED}3)${NC} Connection Monitor"
+    echo -e "  ${RED}4)${NC} Network Dashboard"
+    echo -e "  ${RED}5)${NC} Remove SSL Certificates"
+    echo -e "  ${RED}6)${NC} Uninstall All Components"
+    echo -e "  ${RED}7)${NC} Custom Uninstall Selection"
+    echo
+    echo -e "  ${GREEN}0)${NC} Back to Main Menu"
+    echo
+    
+    while true; do
+        read -p "Enter your choice (0-7): " choice
+        
+        case $choice in
+            1)
+                uninstall_haproxy
+                break
+                ;;
+            2)
+                uninstall_xui
+                break
+                ;;
+            3)
+                uninstall_connection_monitor
+                break
+                ;;
+            4)
+                uninstall_dashboard
+                break
+                ;;
+            5)
+                remove_ssl_certificates
+                break
+                ;;
+            6)
+                uninstall_all_components
+                break
+                ;;
+            7)
+                custom_uninstall_selection
+                break
+                ;;
+            0)
+                get_user_choice
+                break
+                ;;
+            *)
+                print_error "Invalid choice. Please try again."
+                sleep 2
+                ;;
+        esac
+    done
+}
+
+uninstall_haproxy() {
+    print_section "Uninstalling HAProxy"
+    
+    read -p "Are you sure you want to uninstall HAProxy? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "HAProxy uninstall cancelled"
+        return
+    fi
+    
+    print_info "Stopping HAProxy service..."
+    systemctl stop haproxy 2>/dev/null || true
+    systemctl disable haproxy 2>/dev/null || true
+    
+    print_info "Removing HAProxy package..."
+    apt remove -y haproxy 2>/dev/null || true
+    
+    print_info "Removing configuration files..."
+    rm -rf /etc/haproxy/ 2>/dev/null || true
+    
+    print_success "HAProxy uninstalled successfully"
+    
+    read -p "Press Enter to continue..."
+    show_uninstall_menu
+}
+
+uninstall_xui() {
+    print_section "Uninstalling X-UI Panel"
+    
+    read -p "Are you sure you want to uninstall X-UI Panel? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "X-UI uninstall cancelled"
+        return
+    fi
+    
+    print_info "Stopping X-UI service..."
+    systemctl stop x-ui 2>/dev/null || true
+    systemctl disable x-ui 2>/dev/null || true
+    
+    print_info "Removing X-UI files..."
+    rm -rf /usr/local/x-ui/ 2>/dev/null || true
+    rm -f /usr/bin/x-ui 2>/dev/null || true
+    rm -f /etc/systemd/system/x-ui.service 2>/dev/null || true
+    
+    systemctl daemon-reload
+    
+    print_success "X-UI Panel uninstalled successfully"
+    
+    read -p "Press Enter to continue..."
+    show_uninstall_menu
+}
+
+uninstall_connection_monitor() {
+    print_section "Uninstalling Connection Monitor"
+    
+    read -p "Are you sure you want to uninstall Connection Monitor? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Connection Monitor uninstall cancelled"
+        return
+    fi
+    
+    print_info "Stopping Connection Monitor service..."
+    systemctl stop connection-monitor 2>/dev/null || true
+    systemctl disable connection-monitor 2>/dev/null || true
+    
+    print_info "Removing Connection Monitor files..."
+    rm -f /root/connection_monitor.py 2>/dev/null || true
+    rm -f /etc/systemd/system/connection-monitor.service 2>/dev/null || true
+    
+    systemctl daemon-reload
+    
+    print_success "Connection Monitor uninstalled successfully"
+    
+    read -p "Press Enter to continue..."
+    show_uninstall_menu
+}
+
+uninstall_dashboard() {
+    print_section "Uninstalling Network Dashboard"
+    
+    read -p "Are you sure you want to uninstall Network Dashboard? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Dashboard uninstall cancelled"
+        return
+    fi
+    
+    print_info "Stopping Dashboard service..."
+    systemctl stop dashboard 2>/dev/null || true
+    systemctl disable dashboard 2>/dev/null || true
+    
+    print_info "Removing Dashboard files..."
+    rm -f /root/dashboard.py 2>/dev/null || true
+    rm -f /etc/systemd/system/dashboard.service 2>/dev/null || true
+    
+    systemctl daemon-reload
+    
+    print_success "Network Dashboard uninstalled successfully"
+    
+    read -p "Press Enter to continue..."
+    show_uninstall_menu
+}
+
+remove_ssl_certificates() {
+    print_section "Removing SSL Certificates"
+    
+    read -p "Are you sure you want to remove SSL certificates? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "SSL certificate removal cancelled"
+        return
+    fi
+    
+    print_warning "This will remove certificates from /root/cert/"
+    read -p "Continue? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "SSL certificate removal cancelled"
+        return
+    fi
+    
+    print_info "Removing SSL certificates..."
+    rm -rf /root/cert/ 2>/dev/null || true
+    
+    print_success "SSL certificates removed successfully"
+    
+    read -p "Press Enter to continue..."
+    show_uninstall_menu
+}
+
+uninstall_all_components() {
+    print_section "Uninstalling All Components"
+    
+    print_warning "This will remove ALL installed components:"
+    echo "  - HAProxy Load Balancer"
+    echo "  - X-UI Panel"
+    echo "  - Connection Monitor"
+    echo "  - Network Dashboard"
+    echo "  - SSL Certificates"
+    echo
+    
+    read -p "Are you absolutely sure? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Complete uninstall cancelled"
+        return
+    fi
+    
+    print_info "Stopping all services..."
+    systemctl stop haproxy x-ui connection-monitor dashboard 2>/dev/null || true
+    systemctl disable haproxy x-ui connection-monitor dashboard 2>/dev/null || true
+    
+    print_info "Removing packages..."
+    apt remove -y haproxy 2>/dev/null || true
+    
+    print_info "Removing files..."
+    rm -rf /etc/haproxy/ 2>/dev/null || true
+    rm -rf /usr/local/x-ui/ 2>/dev/null || true
+    rm -f /usr/bin/x-ui 2>/dev/null || true
+    rm -f /root/connection_monitor.py 2>/dev/null || true
+    rm -f /root/dashboard.py 2>/dev/null || true
+    rm -f /etc/systemd/system/x-ui.service 2>/dev/null || true
+    rm -f /etc/systemd/system/connection-monitor.service 2>/dev/null || true
+    rm -f /etc/systemd/system/dashboard.service 2>/dev/null || true
+    rm -rf /root/cert/ 2>/dev/null || true
+    
+    systemctl daemon-reload
+    
+    print_success "All components uninstalled successfully"
+    
+    read -p "Press Enter to continue..."
+    show_uninstall_menu
+}
+
+custom_uninstall_selection() {
+    print_banner
+    echo -e "${WHITE}Custom Uninstall Selection${NC}\n"
+    
+    # HAProxy
+    read -p "Uninstall HAProxy Load Balancer? (y/N): " -n 1 -r
+    echo
+    [[ $REPLY =~ ^[Yy]$ ]] && uninstall_haproxy
+    
+    # X-UI
+    read -p "Uninstall X-UI Panel? (y/N): " -n 1 -r
+    echo
+    [[ $REPLY =~ ^[Yy]$ ]] && uninstall_xui
+    
+    # Connection Monitor
+    read -p "Uninstall Connection Monitor? (y/N): " -n 1 -r
+    echo
+    [[ $REPLY =~ ^[Yy]$ ]] && uninstall_connection_monitor
+    
+    # Dashboard
+    read -p "Uninstall Network Dashboard? (y/N): " -n 1 -r
+    echo
+    [[ $REPLY =~ ^[Yy]$ ]] && uninstall_dashboard
+    
+    # SSL
+    read -p "Remove SSL certificates? (y/N): " -n 1 -r
+    echo
+    [[ $REPLY =~ ^[Yy]$ ]] && remove_ssl_certificates
+    
+    print_success "Custom uninstall completed"
+    
+    read -p "Press Enter to continue..."
+    show_uninstall_menu
 }
 
 # =================================================================

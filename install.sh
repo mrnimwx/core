@@ -951,6 +951,8 @@ install_unified_dashboard() {
 [Unit]
 Description=Unified Network Dashboard
 After=network.target
+Wants=network-online.target
+After=network-online.target
 
 [Service]
 Type=simple
@@ -958,9 +960,13 @@ User=root
 WorkingDirectory=/root
 ExecStart=/usr/bin/python3 /root/unified_dashboard.py
 Restart=always
-RestartSec=5
+RestartSec=10
+StartLimitBurst=3
+StartLimitIntervalSec=60
 Environment=DASHBOARD_PASSWORD=$MONITOR_PASSWORD
 Environment=DASHBOARD_PORT=2020
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

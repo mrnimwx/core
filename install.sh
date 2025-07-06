@@ -125,22 +125,29 @@ check_existing_certificates() {
         for cert_dir in /root/cert/*/; do
             if [ -d "$cert_dir" ]; then
                 domain_name=$(basename "$cert_dir")
-                if [ -f "$cert_dir/fullchain.pem" ] && [ -f "$cert_dir/privkey.pem" ]; then
-                    AVAILABLE_DOMAINS+=("$domain_name")
+                # Check if both certificate files exist and are not empty
+                if [ -f "$cert_dir/fullchain.pem" ] && [ -f "$cert_dir/privkey.pem" ] && 
+                   [ -s "$cert_dir/fullchain.pem" ] && [ -s "$cert_dir/privkey.pem" ]; then
+                    # Verify the certificate files are valid
+                    if openssl x509 -in "$cert_dir/fullchain.pem" -noout -text >/dev/null 2>&1; then
+                        AVAILABLE_DOMAINS+=("$domain_name")
+                        print_info "✓ Valid certificate found for: $domain_name"
+                    else
+                        print_warning "⚠ Invalid certificate for: $domain_name"
+                    fi
+                else
+                    print_warning "⚠ Incomplete certificate files for: $domain_name"
                 fi
             fi
         done
     fi
     
     if [ ${#AVAILABLE_DOMAINS[@]} -gt 0 ]; then
-        print_success "Found ${#AVAILABLE_DOMAINS[@]} SSL certificate(s):"
-        for i in "${!AVAILABLE_DOMAINS[@]}"; do
-            echo "  $((i+1))) ${AVAILABLE_DOMAINS[i]}"
-        done
         echo
+        print_success "Found ${#AVAILABLE_DOMAINS[@]} valid SSL certificate(s)"
         return 0
     else
-        print_warning "No SSL certificates found in /root/cert/"
+        print_warning "No valid SSL certificates found in /root/cert/"
         return 1
     fi
 }
@@ -1155,11 +1162,22 @@ main() {
     # Auto-download if not running from git repo
     if [ ! -f "unified_dashboard.py" ] || [ ! -f "haproxy.cfg" ]; then
         print_info "Downloading latest version from GitHub..."
-        if [ -d "core" ]; then
+        
+        # Check if we're already in the core directory
+        if [ "$(basename "$PWD")" = "core" ]; then
+            print_info "Already in core directory"
+        else
+            # Download to temporary location and move files
+            if [ -d "core" ]; then
+                rm -rf core
+            fi
+            git clone https://github.com/mrnimwx/core.git
+            
+            # Move files from core to current directory
+            cp -r core/* .
             rm -rf core
+            print_success "Downloaded successfully"
         fi
-        git clone https://github.com/mrnimwx/core.git && cd core
-        print_success "Downloaded successfully"
     fi
     
     # Check requirements

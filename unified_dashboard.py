@@ -1132,13 +1132,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 def create_ssl_context():
     """Create SSL context for HTTPS"""
-    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    
-    # Look for certificates in common locations
-    cert_paths = []
-    key_paths = []
-    
-    # Check /root/cert directory structure
+    # Check /root/cert directory structure for valid certificates
     if os.path.exists('/root/cert'):
         for item in os.listdir('/root/cert'):
             item_path = os.path.join('/root/cert', item)
@@ -1146,30 +1140,39 @@ def create_ssl_context():
                 # Check for fullchain.pem and privkey.pem (Let's Encrypt format)
                 cert_file = os.path.join(item_path, 'fullchain.pem')
                 key_file = os.path.join(item_path, 'privkey.pem')
+                
                 if os.path.exists(cert_file) and os.path.exists(key_file):
-                    cert_paths.append(cert_file)
-                    key_paths.append(key_file)
-                    break
+                    try:
+                        # Verify certificate files are valid
+                        with open(cert_file, 'r') as f:
+                            cert_content = f.read()
+                        with open(key_file, 'r') as f:
+                            key_content = f.read()
+                        
+                        # Check if files have content
+                        if not cert_content.strip() or not key_content.strip():
+                            print(f"⚠️  Empty certificate files in {item_path}")
+                            continue
+                        
+                        # Create SSL context
+                        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+                        context.minimum_version = ssl.TLSVersion.TLSv1_2
+                        
+                        # Load certificate chain
+                        context.load_cert_chain(cert_file, key_file)
+                        
+                        print(f"✅ Using SSL certificate: {cert_file}")
+                        print(f"✅ Using SSL private key: {key_file}")
+                        return context
+                        
+                    except ssl.SSLError as e:
+                        print(f"⚠️  SSL error loading {cert_file}: {e}")
+                        continue
+                    except Exception as e:
+                        print(f"⚠️  Failed to load {cert_file}: {e}")
+                        continue
     
-    # Fallback paths
-    fallback_certs = ['/root/cert/server.crt', '/root/cert/server.pem']
-    fallback_keys = ['/root/cert/server.key', '/root/cert/private.key']
-    
-    cert_paths.extend(fallback_certs)
-    key_paths.extend(fallback_keys)
-    
-    # Find working certificate pair
-    for cert_path in cert_paths:
-        for key_path in key_paths:
-            if os.path.exists(cert_path) and os.path.exists(key_path):
-                try:
-                    context.load_cert_chain(cert_path, key_path)
-                    print(f"✅ Using SSL certificate: {cert_path}")
-                    return context
-                except Exception as e:
-                    print(f"⚠️  Failed to load {cert_path}: {e}")
-                    continue
-    
+    print("⚠️  No valid SSL certificates found")
     return None
 
 def main():
@@ -1218,12 +1221,15 @@ def main():
     server_display = server_info['display']
     
     if use_ssl:
-        server.socket = ssl_context.wrap_socket(server.socket, server_side=True)
-        print(f"🔒 HTTPS server running on port {port}")
-        if server_info.get('domain'):
+        try:
+            server.socket = ssl_context.wrap_socket(server.socket, server_side=True)
+            print(f"🔒 HTTPS server running on port {port}")
             print(f"🌐 Dashboard URL: https://{server_display}:{port}/")
-        else:
-            print(f"🌐 Dashboard URL: https://{server_display}:{port}/")
+        except Exception as e:
+            print(f"⚠️  Failed to enable SSL: {e}")
+            print(f"🌐 Falling back to HTTP mode")
+            print(f"🌐 Dashboard URL: http://{server_display}:{port}/")
+            use_ssl = False
     else:
         print(f"🌐 HTTP server running on port {port}")
         print(f"🌐 Dashboard URL: http://{server_display}:{port}/")

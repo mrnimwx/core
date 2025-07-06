@@ -21,7 +21,9 @@ NC='\033[0m' # No Color
 
 # Configuration variables
 DOMAIN=""
-MONITOR_PASSWORD="admin123"
+USE_HTTPS=false
+AVAILABLE_DOMAINS=()
+MONITOR_PASSWORD="admin"
 XUI_USERNAME="admin"
 XUI_PASSWORD="admin"
 XUI_PORT="800"
@@ -114,34 +116,98 @@ detect_system() {
     print_success "System check passed"
 }
 
-auto_detect_domain() {
-    print_section "Domain Detection"
+check_existing_certificates() {
+    print_section "Certificate Detection"
     
-    # Auto-detect domain from certificate directory
+    # Check for existing certificates
+    AVAILABLE_DOMAINS=()
     if [ -d "/root/cert" ]; then
         for cert_dir in /root/cert/*/; do
             if [ -d "$cert_dir" ]; then
                 domain_name=$(basename "$cert_dir")
                 if [ -f "$cert_dir/fullchain.pem" ] && [ -f "$cert_dir/privkey.pem" ]; then
-                    DOMAIN="$domain_name"
-                    print_success "Found SSL certificate for domain: $DOMAIN"
-                    return
+                    AVAILABLE_DOMAINS+=("$domain_name")
                 fi
             fi
         done
     fi
     
-    # Try to get from hostname
-    if [ -z "$DOMAIN" ]; then
-        hostname_domain=$(hostname -f 2>/dev/null || echo "")
-        if [[ "$hostname_domain" =~ \. ]]; then
-            DOMAIN="$hostname_domain"
-            print_info "Using hostname as domain: $DOMAIN"
-        fi
+    if [ ${#AVAILABLE_DOMAINS[@]} -gt 0 ]; then
+        print_success "Found ${#AVAILABLE_DOMAINS[@]} SSL certificate(s):"
+        for i in "${!AVAILABLE_DOMAINS[@]}"; do
+            echo "  $((i+1))) ${AVAILABLE_DOMAINS[i]}"
+        done
+        echo
+        return 0
+    else
+        print_warning "No SSL certificates found in /root/cert/"
+        return 1
     fi
-    
-    if [ -z "$DOMAIN" ]; then
-        print_warning "No domain auto-detected"
+}
+
+select_domain_interactive() {
+    if check_existing_certificates; then
+        echo
+        read -p "Do you want to use HTTPS with an existing certificate? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            if [ ${#AVAILABLE_DOMAINS[@]} -eq 1 ]; then
+                DOMAIN="${AVAILABLE_DOMAINS[0]}"
+                USE_HTTPS=true
+                print_success "Selected domain: $DOMAIN"
+            else
+                echo "Select a domain:"
+                for i in "${!AVAILABLE_DOMAINS[@]}"; do
+                    echo "  $((i+1))) ${AVAILABLE_DOMAINS[i]}"
+                done
+                echo "  0) Cancel"
+                echo
+                
+                while true; do
+                    read -p "Enter your choice (0-${#AVAILABLE_DOMAINS[@]}): " choice
+                    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 0 ] && [ "$choice" -le ${#AVAILABLE_DOMAINS[@]} ]; then
+                        if [ "$choice" -eq 0 ]; then
+                            print_info "HTTPS setup cancelled"
+                            USE_HTTPS=false
+                            DOMAIN=""
+                            break
+                        else
+                            DOMAIN="${AVAILABLE_DOMAINS[$((choice-1))]}"
+                            USE_HTTPS=true
+                            print_success "Selected domain: $DOMAIN"
+                            break
+                        fi
+                    else
+                        print_error "Invalid choice. Please try again."
+                    fi
+                done
+            fi
+        else
+            USE_HTTPS=false
+            DOMAIN=""
+            print_info "Will use HTTP mode"
+        fi
+    else
+        echo
+        read -p "Do you want to set up SSL/TLS certificates? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            read -p "Enter your domain name: " domain_input
+            if [ -n "$domain_input" ]; then
+                DOMAIN="$domain_input"
+                USE_HTTPS=true
+                INSTALL_SSL_SETUP=true
+                print_info "Will set up SSL for domain: $DOMAIN"
+            else
+                USE_HTTPS=false
+                DOMAIN=""
+                print_warning "No domain provided. Will use HTTP mode."
+            fi
+        else
+            USE_HTTPS=false
+            DOMAIN=""
+            print_info "Will use HTTP mode"
+        fi
     fi
 }
 
@@ -160,8 +226,9 @@ show_main_menu() {
     echo -e "  ${GREEN}4)${NC} SSL/TLS Setup"
     echo -e "  ${GREEN}5)${NC} Install All Components"
     echo -e "  ${GREEN}6)${NC} Custom Selection"
+    echo -e "  ${CYAN}7)${NC} Add SSL to Existing Dashboard"
     echo
-    echo -e "  ${RED}7)${NC} Uninstall Components"
+    echo -e "  ${RED}8)${NC} Uninstall Components"
     echo
     echo -e "  ${GREEN}0)${NC} Exit"
     echo
@@ -170,7 +237,7 @@ show_main_menu() {
 get_user_choice() {
     while true; do
         show_main_menu
-        read -p "Enter your choice (0-7): " choice
+        read -p "Enter your choice (0-8): " choice
         
         case $choice in
             1)
@@ -185,6 +252,7 @@ get_user_choice() {
                 ;;
             3)
                 INSTALL_UNIFIED_DASHBOARD=true
+                select_domain_interactive
                 get_dashboard_config
                 confirm_and_install
                 break
@@ -200,6 +268,7 @@ get_user_choice() {
                 INSTALL_XUI=true
                 INSTALL_UNIFIED_DASHBOARD=true
                 INSTALL_SSL_SETUP=true
+                select_domain_interactive
                 get_full_config
                 confirm_and_install
                 break
@@ -209,6 +278,10 @@ get_user_choice() {
                 break
                 ;;
             7)
+                add_ssl_to_dashboard
+                break
+                ;;
+            8)
                 show_uninstall_menu
                 break
                 ;;
@@ -243,6 +316,7 @@ custom_selection() {
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         INSTALL_UNIFIED_DASHBOARD=true
+        select_domain_interactive
         get_dashboard_config
     fi
     
@@ -298,16 +372,57 @@ get_full_config() {
         MONITOR_PASSWORD="$dashboard_pass"
     fi
     
-    # Get domain for SSL
-    if [ -z "$DOMAIN" ]; then
-        read -p "Enter your domain name for SSL (optional): " domain_input
-        if [ -n "$domain_input" ]; then
-            DOMAIN="$domain_input"
-        else
-            print_warning "No domain provided. SSL setup will be skipped."
-            INSTALL_SSL_SETUP=false
-        fi
+    # SSL setup is handled by select_domain_interactive
+    if [ "$USE_HTTPS" = false ] && [ -z "$DOMAIN" ]; then
+        print_info "SSL setup will be skipped (HTTP mode selected)"
+        INSTALL_SSL_SETUP=false
     fi
+}
+
+add_ssl_to_dashboard() {
+    print_banner
+    echo -e "${WHITE}Add SSL to Existing Dashboard${NC}\n"
+    
+    # Check if dashboard is running
+    if ! systemctl is-active --quiet unified-dashboard; then
+        print_error "Unified Dashboard is not running. Please install it first."
+        echo
+        read -p "Press Enter to return to main menu..."
+        return
+    fi
+    
+    print_info "Current dashboard is running in HTTP mode"
+    echo
+    
+    # Check for existing certificates and let user choose
+    select_domain_interactive
+    
+    if [ "$USE_HTTPS" = true ] && [ -n "$DOMAIN" ]; then
+        print_section "Configuring SSL for Dashboard"
+        
+        # The unified dashboard will automatically detect SSL certificates
+        # We just need to restart it to pick up the new configuration
+        print_info "Restarting dashboard to enable HTTPS..."
+        systemctl restart unified-dashboard
+        
+        sleep 3
+        
+        if systemctl is-active --quiet unified-dashboard; then
+            print_success "Dashboard updated successfully!"
+            echo
+            print_info "🔒 Dashboard is now available at: https://$DOMAIN:2020/"
+            print_info "🔑 Password: $(systemctl show unified-dashboard -p Environment | grep DASHBOARD_PASSWORD | cut -d'=' -f3)"
+            echo
+            print_info "The dashboard automatically detects SSL certificates and enables HTTPS"
+        else
+            print_error "Failed to restart dashboard. Check logs: journalctl -u unified-dashboard -f"
+        fi
+    else
+        print_info "No SSL configuration selected. Dashboard remains in HTTP mode."
+    fi
+    
+    echo
+    read -p "Press Enter to return to main menu..."
 }
 
 confirm_and_install() {
@@ -317,7 +432,13 @@ confirm_and_install() {
     echo "Components to install:"
     $INSTALL_HAPROXY && echo -e "  ${GREEN}✓${NC} HAProxy Load Balancer"
     $INSTALL_XUI && echo -e "  ${GREEN}✓${NC} X-UI Panel"
-    $INSTALL_UNIFIED_DASHBOARD && echo -e "  ${GREEN}✓${NC} Unified Dashboard (Password: $MONITOR_PASSWORD)"
+    if $INSTALL_UNIFIED_DASHBOARD; then
+        if [ "$USE_HTTPS" = true ] && [ -n "$DOMAIN" ]; then
+            echo -e "  ${GREEN}✓${NC} Unified Dashboard (HTTPS: $DOMAIN, Password: $MONITOR_PASSWORD)"
+        else
+            echo -e "  ${GREEN}✓${NC} Unified Dashboard (HTTP mode, Password: $MONITOR_PASSWORD)"
+        fi
+    fi
     $INSTALL_SSL_SETUP && echo -e "  ${GREEN}✓${NC} SSL/TLS Setup (Domain: $DOMAIN)"
     
     echo
@@ -825,7 +946,17 @@ EOF
     sleep 2
     if systemctl is-active --quiet unified-dashboard; then
         print_success "Unified Dashboard installed and started successfully"
-        print_info "Access URL: https://$(curl -s ifconfig.me):2020/"
+        
+            # Show appropriate URL based on HTTPS selection
+    if [ "$USE_HTTPS" = true ] && [ -n "$DOMAIN" ]; then
+        print_info "Access URL: https://$DOMAIN:2020/"
+        print_info "Mode: HTTPS with SSL certificate"
+    else
+        SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || echo "your-server-ip")
+        print_info "Access URL: http://$SERVER_IP:2020/"
+        print_info "Mode: HTTP (no SSL)"
+        print_info "💡 You can add SSL later by selecting option 7 from the main menu"
+    fi
         print_info "Password: $MONITOR_PASSWORD"
     else
         print_error "Unified Dashboard failed to start"
@@ -905,10 +1036,17 @@ show_installation_summary() {
     echo
     echo -e "${WHITE}Access URLs:${NC}"
     
-    SERVER_IP=$(curl -s ifconfig.me)
+    # Get server info - prefer domain over IP
+    if [ -n "$DOMAIN" ]; then
+        SERVER_DISPLAY="$DOMAIN"
+        PROTOCOL="https"
+    else
+        SERVER_DISPLAY=$(curl -s ifconfig.me)
+        PROTOCOL="http"
+    fi
     
-    $INSTALL_XUI && echo -e "  ${CYAN}🌐${NC} X-UI Panel: http://$SERVER_IP:$XUI_PORT/"
-    $INSTALL_UNIFIED_DASHBOARD && echo -e "  ${CYAN}📊${NC} Unified Dashboard: https://$SERVER_IP:2020/"
+    $INSTALL_XUI && echo -e "  ${CYAN}🌐${NC} X-UI Panel: http://$SERVER_DISPLAY:$XUI_PORT/"
+    $INSTALL_UNIFIED_DASHBOARD && echo -e "  ${CYAN}📊${NC} Unified Dashboard: $PROTOCOL://$SERVER_DISPLAY:2020/"
     $INSTALL_HAPROXY && echo -e "  ${CYAN}🔀${NC} HAProxy Ports: 8080, 8082, 8083, 8084, 8085, 8086"
     
     echo
@@ -947,7 +1085,6 @@ main() {
     # Check requirements
     check_root
     detect_system
-    auto_detect_domain
     
     # Show interactive menu
     get_user_choice

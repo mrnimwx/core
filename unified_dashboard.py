@@ -124,13 +124,17 @@ class UnifiedDashboardHandler(BaseHTTPRequestHandler):
     def _serve_api_status(self):
         """Serve general system status"""
         try:
+            server_info = self._get_server_info()
             status = {
                 'timestamp': datetime.now().isoformat(),
                 'server_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'uptime': self._get_uptime(),
                 'load_average': self._get_load_average(),
                 'tls_info': self._get_tls_info(),
-                'server_ip': self._get_server_ip()
+                'server_info': server_info,
+                'server_ip': server_info.get('ip', server_info['display']),  # Keep for backward compatibility
+                'server_domain': server_info.get('domain'),
+                'server_display': server_info['display']
             }
             self._send_json(status)
         except Exception as e:
@@ -196,11 +200,41 @@ class UnifiedDashboardHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json_data.encode())
     
-    def _get_server_ip(self):
-        """Get server IP address"""
+    def _get_server_info(self):
+        """Get server domain and IP address"""
         try:
+            # Try to get domain from SSL certificates first
+            domain = self._get_server_domain()
+            if domain and domain != "Unknown":
+                return {'domain': domain, 'display': domain}
+            
+            # Fallback to IP address
             result = subprocess.run(['curl', '-s', 'ifconfig.me'], capture_output=True, text=True, timeout=5)
-            return result.stdout.strip()
+            ip = result.stdout.strip()
+            return {'domain': None, 'display': ip, 'ip': ip}
+        except:
+            return {'domain': None, 'display': "Unknown", 'ip': "Unknown"}
+    
+    def _get_server_domain(self):
+        """Get server domain from SSL certificates"""
+        try:
+            # Check /root/cert directory for domain
+            if os.path.exists('/root/cert'):
+                for item in os.listdir('/root/cert'):
+                    item_path = os.path.join('/root/cert', item)
+                    if os.path.isdir(item_path):
+                        # Check if it has SSL certificates
+                        cert_file = os.path.join(item_path, 'fullchain.pem')
+                        key_file = os.path.join(item_path, 'privkey.pem')
+                        if os.path.exists(cert_file) and os.path.exists(key_file):
+                            return item  # Return domain name
+            
+            # Try to get from hostname
+            hostname = subprocess.run(['hostname', '-f'], capture_output=True, text=True, timeout=5)
+            if hostname.returncode == 0 and '.' in hostname.stdout.strip():
+                return hostname.stdout.strip()
+                
+            return "Unknown"
         except:
             return "Unknown"
     
@@ -990,8 +1024,8 @@ class UnifiedDashboardHandler(BaseHTTPRequestHandler):
                     <span class="metric-value">${tls.certificates?.length || 0}</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-label">Server IP</span>
-                    <span class="metric-value">${data.server_ip || 'Unknown'}</span>
+                    <span class="metric-label">Server</span>
+                    <span class="metric-value">${data.server_display || data.server_ip || 'Unknown'}</span>
                 </div>
                 ${tls.certificates?.map(cert => `
                     <div class="metric">
@@ -1156,13 +1190,21 @@ def main():
     # Create and configure server
     server = ThreadedHTTPServer(('0.0.0.0', port), UnifiedDashboardHandler)
     
+    # Get server info for display
+    temp_handler = UnifiedDashboardHandler(None, None, None)
+    server_info = temp_handler._get_server_info()
+    server_display = server_info['display']
+    
     if use_ssl:
         server.socket = ssl_context.wrap_socket(server.socket, server_side=True)
         print(f"🔒 HTTPS server running on port {port}")
-        print(f"🌐 Dashboard URL: https://your-domain.com:{port}/")
+        if server_info.get('domain'):
+            print(f"🌐 Dashboard URL: https://{server_display}:{port}/")
+        else:
+            print(f"🌐 Dashboard URL: https://{server_display}:{port}/")
     else:
         print(f"🌐 HTTP server running on port {port}")
-        print(f"🌐 Dashboard URL: http://your-server-ip:{port}/")
+        print(f"🌐 Dashboard URL: http://{server_display}:{port}/")
         print("⚠️  No SSL certificate found - running in HTTP mode")
     
     print(f"🔑 Default credentials: any-username / {password}")

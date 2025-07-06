@@ -235,9 +235,10 @@ show_main_menu() {
     echo -e "  ${GREEN}4)${NC} SSL/TLS Setup"
     echo -e "  ${GREEN}5)${NC} Install All Components"
     echo -e "  ${GREEN}6)${NC} Custom Selection"
-    echo -e "  ${CYAN}7)${NC} Add SSL to Existing Dashboard"
+    echo -e "  ${CYAN}7)${NC} Configure HAProxy Backends"
+    echo -e "  ${CYAN}8)${NC} Add SSL to Existing Dashboard"
     echo
-    echo -e "  ${RED}8)${NC} Uninstall Components"
+    echo -e "  ${RED}9)${NC} Uninstall Components"
     echo
     echo -e "  ${GREEN}0)${NC} Exit"
     echo
@@ -246,7 +247,7 @@ show_main_menu() {
 get_user_choice() {
     while true; do
         show_main_menu
-        read -p "Enter your choice (0-8): " choice
+        read -p "Enter your choice (0-9): " choice
         
         case $choice in
             1)
@@ -289,10 +290,14 @@ get_user_choice() {
                 break
                 ;;
             7)
-                add_ssl_to_dashboard
+                configure_haproxy_backends
                 break
                 ;;
             8)
+                add_ssl_to_dashboard
+                break
+                ;;
+            9)
                 show_uninstall_menu
                 break
                 ;;
@@ -421,6 +426,198 @@ get_full_config() {
         print_info "SSL setup will be skipped (HTTP mode selected)"
         INSTALL_SSL_SETUP=false
     fi
+}
+
+configure_haproxy_backends() {
+    print_banner
+    echo -e "${WHITE}Configure HAProxy Backends${NC}\n"
+    
+    # Check if HAProxy is installed
+    if ! command -v haproxy &> /dev/null; then
+        print_error "HAProxy is not installed. Please install it first."
+        echo
+        read -p "Press Enter to return to main menu..."
+        return
+    fi
+    
+    # Show current configuration
+    if [ -f "/etc/haproxy/haproxy.cfg" ]; then
+        print_info "Current HAProxy configuration detected"
+        echo
+        if grep -q "plus.*\." /etc/haproxy/haproxy.cfg; then
+            CURRENT_DOMAIN=$(grep "plus.*\." /etc/haproxy/haproxy.cfg | head -1 | sed 's/.*plus[0-9]*\.\([^:]*\):.*/\1/')
+            print_info "Current backend type: Domain-based ($CURRENT_DOMAIN)"
+        else
+            print_info "Current backend type: Internal IP addresses"
+        fi
+        echo
+    fi
+    
+    # Get new configuration
+    get_haproxy_config
+    
+    if [ "$USE_DOMAIN_BACKENDS" = true ] && [ -n "$BACKEND_DOMAIN" ]; then
+        print_section "Updating HAProxy Configuration"
+        
+        # Backup current config
+        if [ -f "/etc/haproxy/haproxy.cfg" ]; then
+            cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.backup.$(date +%Y%m%d_%H%M%S)
+            print_info "Current configuration backed up"
+        fi
+        
+        # Create new domain-based configuration
+        print_info "Creating domain-based configuration for: $BACKEND_DOMAIN"
+        cat > /etc/haproxy/haproxy.cfg << EOF
+# HAProxy Configuration - Domain-based Backends
+global
+    daemon
+    user haproxy
+    group haproxy
+    log stdout local0
+
+defaults
+    mode tcp
+    timeout connect 10s
+    timeout client 1m
+    timeout server 1m
+    log global
+
+frontend incoming
+    bind *:8080
+    bind *:8082
+    bind *:8083
+    bind *:8084
+    bind *:8085
+    bind *:8086
+
+    use_backend sv6 if { dst_port 8080 }
+    use_backend sv2 if { dst_port 8082 }
+    use_backend sv3 if { dst_port 8083 }
+    use_backend sv4 if { dst_port 8084 }
+    use_backend sv5 if { dst_port 8085 }
+    use_backend sv1 if { dst_port 8086 }
+
+backend sv6
+    server sv6 plus6.$BACKEND_DOMAIN:8080
+
+backend sv2
+    server sv2 plus2.$BACKEND_DOMAIN:8082
+
+backend sv3
+    server sv3 plus3.$BACKEND_DOMAIN:8083
+
+backend sv4
+    server sv4 plus4.$BACKEND_DOMAIN:8084
+
+backend sv5
+    server sv5 plus5.$BACKEND_DOMAIN:8085
+
+backend sv1
+    server sv1 plus1.$BACKEND_DOMAIN:8086
+EOF
+    else
+        print_section "Updating HAProxy Configuration"
+        
+        # Backup current config
+        if [ -f "/etc/haproxy/haproxy.cfg" ]; then
+            cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.backup.$(date +%Y%m%d_%H%M%S)
+            print_info "Current configuration backed up"
+        fi
+        
+        # Create new internal IP configuration
+        print_info "Creating internal IP configuration"
+        cat > /etc/haproxy/haproxy.cfg << 'EOF'
+# HAProxy Configuration - Internal IP Backends
+global
+    daemon
+    user haproxy
+    group haproxy
+    log stdout local0
+
+defaults
+    mode tcp
+    timeout connect 10s
+    timeout client 1m
+    timeout server 1m
+    log global
+
+frontend incoming
+    bind *:8080
+    bind *:8082
+    bind *:8083
+    bind *:8084
+    bind *:8085
+    bind *:8086
+
+    use_backend sv6 if { dst_port 8080 }
+    use_backend sv2 if { dst_port 8082 }
+    use_backend sv3 if { dst_port 8083 }
+    use_backend sv4 if { dst_port 8084 }
+    use_backend sv5 if { dst_port 8085 }
+    use_backend sv1 if { dst_port 8086 }
+
+backend sv6
+    server sv6 10.0.0.4:8080
+
+backend sv2
+    server sv2 10.0.0.5:8082
+
+backend sv3
+    server sv3 10.0.0.6:8083
+
+backend sv4
+    server sv4 10.0.0.7:8084
+
+backend sv5
+    server sv5 10.0.0.8:8085
+
+backend sv1
+    server sv1 10.0.0.9:8086
+EOF
+    fi
+    
+    # Test configuration
+    print_info "Testing HAProxy configuration..."
+    if haproxy -c -f /etc/haproxy/haproxy.cfg; then
+        print_success "HAProxy configuration is valid"
+        
+        # Restart HAProxy
+        print_info "Restarting HAProxy..."
+        systemctl restart haproxy
+        
+        sleep 2
+        
+        if systemctl is-active --quiet haproxy; then
+            print_success "HAProxy restarted successfully!"
+            echo
+            if [ "$USE_DOMAIN_BACKENDS" = true ] && [ -n "$BACKEND_DOMAIN" ]; then
+                print_info "✅ Backend configuration: Domain-based ($BACKEND_DOMAIN)"
+                print_info "📋 Backends:"
+                print_info "   • Port 8080 → plus6.$BACKEND_DOMAIN:8080"
+                print_info "   • Port 8082 → plus2.$BACKEND_DOMAIN:8082"
+                print_info "   • Port 8083 → plus3.$BACKEND_DOMAIN:8083"
+                print_info "   • Port 8084 → plus4.$BACKEND_DOMAIN:8084"
+                print_info "   • Port 8085 → plus5.$BACKEND_DOMAIN:8085"
+                print_info "   • Port 8086 → plus1.$BACKEND_DOMAIN:8086"
+            else
+                print_info "✅ Backend configuration: Internal IP addresses"
+                print_info "📋 Backends:"
+                print_info "   • Port 8080 → 10.0.0.4:8080"
+                print_info "   • Port 8082 → 10.0.0.5:8082"
+                print_info "   • Port 8083 → 10.0.0.6:8083"
+                print_info "   • Port 8084 → 10.0.0.7:8084"
+                print_info "   • Port 8085 → 10.0.0.8:8085"
+                print_info "   • Port 8086 → 10.0.0.9:8086"
+            fi
+        else
+            print_error "Failed to restart HAProxy. Check logs: journalctl -u haproxy -f"
+        fi
+    else
+        print_error "HAProxy configuration is invalid. Configuration not changed."
+    fi
+    
+    echo
+    read -p "Press Enter to return to main menu..."
 }
 
 add_ssl_to_dashboard() {
